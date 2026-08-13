@@ -87,15 +87,15 @@ final class LocalIntentParser {
     }
 
     private func firstMatch(_ pattern: String, in input: String, group: Int) -> String? {
-        let values = captures(pattern, in: input)
+        guard let values = captures(pattern, in: input) else { return nil }
         let index = group - 1
         return values.indices.contains(index) ? values[index] : nil
     }
 
-    private func captures(_ pattern: String, in input: String) -> [String] {
+    private func captures(_ pattern: String, in input: String) -> [String]? {
         guard let expression = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
               let result = expression.firstMatch(in: input, range: NSRange(input.startIndex..., in: input)) else {
-            return []
+            return nil
         }
         return (1..<result.numberOfRanges).compactMap { index in
             let range = result.range(at: index)
