@@ -24,8 +24,6 @@ jobs:
 
     env:
       DEVELOPER_DIR: /Applications/Xcode_16.4.app/Contents/Developer
-      DERIVED_DATA_PATH: ${{ runner.temp }}/JarvisDerivedData
-      TEST_DERIVED_DATA_PATH: ${{ runner.temp }}/JarvisTestDerivedData
 
     steps:
       - name: Check out repository
@@ -51,7 +49,7 @@ jobs:
             -scheme Jarvis \
             -configuration Debug \
             -destination 'generic/platform=macOS' \
-            -derivedDataPath "$DERIVED_DATA_PATH" \
+            -derivedDataPath "$RUNNER_TEMP/JarvisDerivedData" \
             CODE_SIGNING_ALLOWED=NO \
             MACOSX_DEPLOYMENT_TARGET=11.0 \
             ONLY_ACTIVE_ARCH=NO \
@@ -66,7 +64,7 @@ jobs:
             -scheme Jarvis \
             -configuration Debug \
             -destination 'platform=macOS' \
-            -derivedDataPath "$TEST_DERIVED_DATA_PATH" \
+            -derivedDataPath "$RUNNER_TEMP/JarvisTestDerivedData" \
             CODE_SIGNING_ALLOWED=NO \
             MACOSX_DEPLOYMENT_TARGET=11.0 \
             test
