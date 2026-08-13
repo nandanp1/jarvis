@@ -112,9 +112,9 @@ final class SystemStatusService {
             let usableTimeRemaining = timeRemaining.flatMap { $0 >= 0 ? $0 : nil }
             let state = string(for: kIOPSPowerSourceStateKey, in: description)
             let powerSource: PowerSource
-            if state == (kIOPSACPowerValue as String) {
+            if state == kIOPSACPowerValue {
                 powerSource = .acPower
-            } else if state == (kIOPSBatteryPowerValue as String) {
+            } else if state == kIOPSBatteryPowerValue {
                 powerSource = .battery
             } else {
                 powerSource = .unknown
@@ -157,12 +157,12 @@ final class SystemStatusService {
         return sysctlbyname(name, &value, &size, nil, 0) == 0 && value == 1
     }
 
-    private func number(for key: CFString, in description: [String: Any]) -> NSNumber? {
-        description[key as String] as? NSNumber
+    private func number(for key: String, in description: [String: Any]) -> NSNumber? {
+        description[key] as? NSNumber
     }
 
-    private func string(for key: CFString, in description: [String: Any]) -> String? {
-        description[key as String] as? String
+    private func string(for key: String, in description: [String: Any]) -> String? {
+        description[key] as? String
     }
 
     private func executeAppleScript(_ source: String) throws -> NSAppleEventDescriptor {
