@@ -30,6 +30,13 @@ Xcode 13.2.x itself requires a sufficiently updated Big Sur development host, wh
 
 ## Build
 
+The latest downloadable universal app is available from
+[GitHub Releases](https://github.com/nandanp1/jarvis/releases). Automated release
+builds are ad-hoc signed rather than Developer ID signed/notarized; on first
+launch, Control-click `Jarvis.app`, choose **Open**, and approve the macOS prompt.
+To install, unzip the download and move `Jarvis.app` into `/Applications` or
+`~/Applications` before enabling launch at login.
+
 ```bash
 git clone https://github.com/nandanp1/jarvis.git ~/jarvis
 cd ~/jarvis
