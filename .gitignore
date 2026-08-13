@@ -1,0 +1,40 @@
+# Xcode build products
+build/
+DerivedData/
+*.xcarchive
+*.dSYM
+*.dSYM.zip
+
+# Per-user Xcode state
+xcuserdata/
+*.xcuserstate
+*.xccheckout
+*.xcscmblueprint
+
+# Swift Package Manager
+.build/
+.swiftpm/
+Package.resolved
+
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+*.pem
+*.p12
+*.mobileprovision
+Secrets.swift
+
+# Runtime data
+*.m4a
+*.wav
+*.caf
+*.log
+Jarvis.local.json
+
+# macOS and editors
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
