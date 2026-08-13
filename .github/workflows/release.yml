@@ -101,7 +101,7 @@ jobs:
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$INFO_PATH")" = "Jarvis"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$INFO_PATH")" = "com.nandan.jarvis"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$INFO_PATH")" = "${RELEASE_TAG#v}"
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$INFO_PATH")" = "1"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$INFO_PATH")" = "2"
           test "$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$INFO_PATH")" = "11.0"
 
           ARCHITECTURES="$(lipo -archs "$EXECUTABLE_PATH")"
@@ -122,14 +122,20 @@ jobs:
               codesign --force --sign - --timestamp=none "$library"
             done < <(find "$APP_PATH/Contents/Frameworks" -type f -name '*.dylib' -print0)
           fi
-          codesign --force --sign - --timestamp=none --options runtime --generate-entitlement-der \
+          # This public build has no Developer ID identity. Do not enable the
+          # hardened-runtime library-validation flag on an ad-hoc-signed app:
+          # its back-deployed Swift concurrency library also has no Team ID.
+          codesign --force --sign - --timestamp=none --generate-entitlement-der \
             --entitlements Jarvis/Resources/Jarvis.entitlements \
             "$APP_PATH"
           codesign --verify --deep --strict --all-architectures --verbose=2 "$APP_PATH"
 
           SIGNATURE="$(codesign --display --verbose=4 "$APP_PATH" 2>&1)"
           grep -q 'Signature=adhoc' <<< "$SIGNATURE"
-          grep -Eq 'flags=.*runtime' <<< "$SIGNATURE"
+          if grep -Eq 'flags=.*runtime' <<< "$SIGNATURE"; then
+            echo "An ad-hoc release must not enable hardened library validation." >&2
+            exit 1
+          fi
           grep -q '^Identifier=com.nandan.jarvis$' <<< "$SIGNATURE"
 
           EMBEDDED_ENTITLEMENTS="$RUNNER_TEMP/JarvisEmbeddedEntitlements.plist"
@@ -170,6 +176,30 @@ jobs:
           [[ " $EXTRACTED_ARCHITECTURES " == *" x86_64 "* ]]
           [[ " $EXTRACTED_ARCHITECTURES " == *" arm64 "* ]]
           codesign --verify --deep --strict --all-architectures --verbose=2 "$EXTRACTED_APP"
+
+          # Static signature verification does not exercise dyld. Launch the
+          # exact extracted Release executable and require it to remain alive,
+          # catching startup crashes and library-validation failures before the
+          # ZIP is published.
+          SMOKE_LOG="$RUNNER_TEMP/JarvisRelease/startup-smoke.log"
+          "$EXTRACTED_EXECUTABLE" > "$SMOKE_LOG" 2>&1 &
+          SMOKE_PID=$!
+          cleanup_smoke() {
+            kill "$SMOKE_PID" 2>/dev/null || true
+            wait "$SMOKE_PID" 2>/dev/null || true
+          }
+          trap cleanup_smoke EXIT
+          for attempt in {1..20}; do
+            if ! kill -0 "$SMOKE_PID" 2>/dev/null; then
+              wait "$SMOKE_PID" || status=$?
+              cat "$SMOKE_LOG"
+              echo "Jarvis exited during the signed Release startup smoke test (status ${status:-unknown})." >&2
+              exit 1
+            fi
+            sleep 0.25
+          done
+          cleanup_smoke
+          trap - EXIT
 
       - name: Upload build artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

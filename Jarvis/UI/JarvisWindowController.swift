@@ -15,6 +15,8 @@ final class JarvisWindowController: NSWindowController {
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
         window.isMovableByWindowBackground = true
+        window.isReleasedWhenClosed = false
+        window.collectionBehavior.insert(.moveToActiveSpace)
         window.backgroundColor = JarvisTheme.background
         window.minSize = NSSize(width: 460, height: 590)
         window.center()
@@ -28,9 +30,9 @@ final class JarvisWindowController: NSWindowController {
     }
 
     func present() {
+        NSApp.activate(ignoringOtherApps: true)
         showWindow(nil)
         window?.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
+        window?.orderFrontRegardless()
     }
 }
-

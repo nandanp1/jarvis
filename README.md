@@ -140,6 +140,7 @@ Detailed design and contributor guidance live in:
 
 ## Troubleshooting
 
+- **Opening Jarvis appears to do nothing:** Jarvis has no Dock icon. Look for **◆ Jarvis** in the menu bar and choose **Open Jarvis**. Quit any older Jarvis copy before replacing the app. For an automated release, first Control-click `Jarvis.app`, choose **Open**, and approve the Gatekeeper prompt.
 - **Talk does nothing:** check both privacy permissions and the selected input device.
 - **Hands-free mode is unavailable:** install/enable the macOS on-device dictation language if offered, or use Talk. Jarvis will not use server-assisted recognition continuously while idle.
 - **Gemini rejects the key/model:** test the key in Settings and choose a currently supported model ID.
