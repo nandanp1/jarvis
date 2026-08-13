@@ -622,9 +622,10 @@ final class JarvisSettingsViewController: NSViewController {
     private func setStatus(_ label: NSTextField, message: String, result: Bool?) {
         label.stringValue = message
         switch result {
-        case true: label.textColor = JarvisTheme.success
-        case false: label.textColor = JarvisTheme.danger
-        case nil: label.textColor = JarvisTheme.secondaryText
+        case .some(let succeeded):
+            label.textColor = succeeded ? JarvisTheme.success : JarvisTheme.danger
+        case .none:
+            label.textColor = JarvisTheme.secondaryText
         }
     }
 
