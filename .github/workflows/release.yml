@@ -1,0 +1,171 @@
+name: Release Jarvis
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag (for example, v1.0.0)
+        required: true
+        type: string
+      prerelease:
+        description: Publish as a prerelease
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: jarvis-release-${{ inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build and publish universal macOS app
+    runs-on: macos-15
+    timeout-minutes: 30
+
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_16.4.app/Contents/Developer
+      RELEASE_TAG: ${{ inputs.tag }}
+
+    steps:
+      - name: Check out main
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.0.2
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Validate release request
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Release tag must look like v1.0.0 or v1.0.0-beta.1" >&2
+            exit 1
+          fi
+          if git rev-parse "refs/tags/$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "Tag $RELEASE_TAG already exists; release publication is intentionally non-destructive." >&2
+            exit 1
+          fi
+          ./scripts/validate-project.sh
+
+      - name: Report toolchain
+        run: |
+          sw_vers
+          uname -m
+          xcodebuild -version
+          swift --version
+
+      - name: Run unit tests
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project Jarvis.xcodeproj \
+            -scheme Jarvis \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            -derivedDataPath "$RUNNER_TEMP/JarvisTestDerivedData" \
+            CODE_SIGNING_ALLOWED=NO \
+            MACOSX_DEPLOYMENT_TARGET=11.0 \
+            test
+
+      - name: Build universal Release app for macOS 11
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project Jarvis.xcodeproj \
+            -scheme Jarvis \
+            -configuration Release \
+            -destination 'generic/platform=macOS' \
+            -derivedDataPath "$RUNNER_TEMP/JarvisReleaseDerivedData" \
+            CODE_SIGNING_ALLOWED=NO \
+            MACOSX_DEPLOYMENT_TARGET=11.0 \
+            ONLY_ACTIVE_ARCH=NO \
+            ARCHS='x86_64 arm64' \
+            build
+
+      - name: Ad-hoc sign and verify app
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP_PATH="$RUNNER_TEMP/JarvisReleaseDerivedData/Build/Products/Release/Jarvis.app"
+          EXECUTABLE_PATH="$APP_PATH/Contents/MacOS/Jarvis"
+
+          test -d "$APP_PATH"
+          test -x "$EXECUTABLE_PATH"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP_PATH/Contents/Info.plist")" = "com.nandan.jarvis"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$APP_PATH/Contents/Info.plist")" = "11.0"
+
+          ARCHITECTURES="$(lipo -archs "$EXECUTABLE_PATH")"
+          [[ " $ARCHITECTURES " == *" x86_64 "* ]]
+          [[ " $ARCHITECTURES " == *" arm64 "* ]]
+
+          if [[ -d "$APP_PATH/Contents/Frameworks" ]]; then
+            while IFS= read -r -d '' library; do
+              codesign --force --sign - --timestamp=none "$library"
+            done < <(find "$APP_PATH/Contents/Frameworks" -type f -name '*.dylib' -print0)
+          fi
+          codesign --force --sign - --timestamp=none --options runtime \
+            --entitlements Jarvis/Resources/Jarvis.entitlements \
+            "$APP_PATH"
+          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+
+      - name: Package executable app
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP_PATH="$RUNNER_TEMP/JarvisReleaseDerivedData/Build/Products/Release/Jarvis.app"
+          mkdir -p "$RUNNER_TEMP/JarvisRelease"
+          ditto -c -k --sequesterRsrc --keepParent \
+            "$APP_PATH" \
+            "$RUNNER_TEMP/JarvisRelease/Jarvis-macOS-11-universal.zip"
+          cd "$RUNNER_TEMP/JarvisRelease"
+          shasum -a 256 Jarvis-macOS-11-universal.zip > Jarvis-macOS-11-universal.zip.sha256
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v7.0.1
+        with:
+          name: Jarvis-${{ inputs.tag }}-macOS-11-universal
+          path: |
+            ${{ runner.temp }}/JarvisRelease/Jarvis-macOS-11-universal.zip
+            ${{ runner.temp }}/JarvisRelease/Jarvis-macOS-11-universal.zip.sha256
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRERELEASE: ${{ inputs.prerelease }}
+        run: |
+          set -euo pipefail
+          NOTES_FILE="$RUNNER_TEMP/JarvisRelease/release-notes.md"
+          cat > "$NOTES_FILE" <<'EOF'
+          Jarvis is an always-on macOS room assistant with Gemini reasoning, native voice input/output, Home Assistant control, safe Mac automation, routines, and an AppKit ambient interface.
+
+          This download contains a universal `Jarvis.app` for Intel and Apple silicon Macs with a macOS 11.0 deployment target.
+
+          Important: this automated build is ad-hoc signed, not Developer ID signed or Apple-notarized. On first launch, Control-click `Jarvis.app`, choose Open, and approve the macOS prompt. Review README.md before entering credentials or enabling hands-free mode.
+
+          Credentials are entered in Jarvis Settings and stored in macOS Keychain. A Gemini API key is required for cloud reasoning; a Home Assistant URL and long-lived token are required for smart-home control.
+          EOF
+          printf '\nBuilt from commit `%s`.\n' "$GITHUB_SHA" >> "$NOTES_FILE"
+
+          RELEASE_ARGUMENTS=(
+            "$RELEASE_TAG"
+            "$RUNNER_TEMP/JarvisRelease/Jarvis-macOS-11-universal.zip"
+            "$RUNNER_TEMP/JarvisRelease/Jarvis-macOS-11-universal.zip.sha256"
+            --repo "$GITHUB_REPOSITORY"
+            --target "$GITHUB_SHA"
+            --title "Jarvis $RELEASE_TAG"
+            --notes-file "$NOTES_FILE"
+            --verify-tag=false
+          )
+          if [[ "$PRERELEASE" == "true" ]]; then
+            RELEASE_ARGUMENTS+=(--prerelease)
+          else
+            RELEASE_ARGUMENTS+=(--latest)
+          fi
+          gh release create "${RELEASE_ARGUMENTS[@]}"
