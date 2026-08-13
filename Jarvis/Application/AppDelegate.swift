@@ -45,7 +45,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let existingInstances = NSRunningApplication
             .runningApplications(withBundleIdentifier: bundleIdentifier)
             .filter { !$0.isTerminated && $0.processIdentifier != currentPID }
-        guard let keeper = existingInstances.min(by: Self.launchedBefore) else { return false }
+        guard !existingInstances.isEmpty else { return false }
+
+        // Every concurrently launching process must elect the same winner.
+        // Including this process prevents two new copies from each selecting
+        // the other and both terminating.
+        let candidates = existingInstances + [NSRunningApplication.current]
+        guard let keeper = candidates.min(by: Self.launchedBefore),
+              keeper.processIdentifier != currentPID else { return false }
+
+        // A login agent must never bring a deliberately headless instance's
+        // window forward. It simply yields to whichever Jarvis is already up.
+        if launchedAtLogin {
+            NSApp.terminate(nil)
+            return true
+        }
 
         guard let applicationURL = keeper.bundleURL else {
             // A bundle-backed app should always have a URL. If Launch Services
@@ -58,10 +72,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let configuration = NSWorkspace.OpenConfiguration()
         configuration.activates = true
         NSWorkspace.shared.openApplication(at: applicationURL, configuration: configuration) {
-            [weak self, weak keeper] _, error in
+            [weak self, weak keeper] reopenedApplication, error in
             DispatchQueue.main.async {
                 guard let self = self else { return }
-                if error == nil {
+                if error == nil,
+                   let keeper = keeper,
+                   reopenedApplication?.processIdentifier == keeper.processIdentifier,
+                   !keeper.isTerminated {
                     NSApp.terminate(nil)
                     return
                 }
