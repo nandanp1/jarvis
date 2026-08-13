@@ -32,9 +32,9 @@ jobs:
 
     steps:
       - name: Check out main
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.0.2
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
-          ref: main
+          ref: ${{ github.sha }}
           fetch-depth: 0
 
       - name: Validate release request
@@ -49,6 +49,8 @@ jobs:
             echo "Tag $RELEASE_TAG already exists; release publication is intentionally non-destructive." >&2
             exit 1
           fi
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Jarvis/Resources/Info.plist)" = "${RELEASE_TAG#v}"
           ./scripts/validate-project.sh
 
       - name: Report toolchain
@@ -92,25 +94,56 @@ jobs:
           set -euo pipefail
           APP_PATH="$RUNNER_TEMP/JarvisReleaseDerivedData/Build/Products/Release/Jarvis.app"
           EXECUTABLE_PATH="$APP_PATH/Contents/MacOS/Jarvis"
+          INFO_PATH="$APP_PATH/Contents/Info.plist"
 
           test -d "$APP_PATH"
           test -x "$EXECUTABLE_PATH"
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP_PATH/Contents/Info.plist")" = "com.nandan.jarvis"
-          test "$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$APP_PATH/Contents/Info.plist")" = "11.0"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$INFO_PATH")" = "Jarvis"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$INFO_PATH")" = "com.nandan.jarvis"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$INFO_PATH")" = "${RELEASE_TAG#v}"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$INFO_PATH")" = "1"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$INFO_PATH")" = "11.0"
 
           ARCHITECTURES="$(lipo -archs "$EXECUTABLE_PATH")"
           [[ " $ARCHITECTURES " == *" x86_64 "* ]]
           [[ " $ARCHITECTURES " == *" arm64 "* ]]
 
+          for architecture in x86_64 arm64; do
+            MINIMUM_OS="$(otool -l -arch "$architecture" "$EXECUTABLE_PATH" | awk '$1 == "minos" {print $2; exit}')"
+            test "$MINIMUM_OS" = "11.0"
+          done
+
           if [[ -d "$APP_PATH/Contents/Frameworks" ]]; then
+            test -f "$APP_PATH/Contents/Frameworks/libswift_Concurrency.dylib"
             while IFS= read -r -d '' library; do
+              FILE_ARCHITECTURES="$(lipo -archs "$library")"
+              [[ " $FILE_ARCHITECTURES " == *" x86_64 "* ]]
+              [[ " $FILE_ARCHITECTURES " == *" arm64 "* ]]
               codesign --force --sign - --timestamp=none "$library"
             done < <(find "$APP_PATH/Contents/Frameworks" -type f -name '*.dylib' -print0)
           fi
-          codesign --force --sign - --timestamp=none --options runtime \
+          codesign --force --sign - --timestamp=none --options runtime --generate-entitlement-der \
             --entitlements Jarvis/Resources/Jarvis.entitlements \
             "$APP_PATH"
-          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+          codesign --verify --deep --strict --all-architectures --verbose=2 "$APP_PATH"
+
+          SIGNATURE="$(codesign --display --verbose=4 "$APP_PATH" 2>&1)"
+          grep -q 'Signature=adhoc' <<< "$SIGNATURE"
+          grep -Eq 'flags=.*runtime' <<< "$SIGNATURE"
+          grep -q '^Identifier=com.nandan.jarvis$' <<< "$SIGNATURE"
+
+          EMBEDDED_ENTITLEMENTS="$RUNNER_TEMP/JarvisEmbeddedEntitlements.plist"
+          codesign --display --entitlements - --xml "$APP_PATH" > "$EMBEDDED_ENTITLEMENTS"
+          python3 - Jarvis/Resources/Jarvis.entitlements "$EMBEDDED_ENTITLEMENTS" <<'PY'
+          import plistlib
+          import sys
+          with open(sys.argv[1], "rb") as expected_file:
+              expected = plistlib.load(expected_file)
+          with open(sys.argv[2], "rb") as actual_file:
+              actual = plistlib.load(actual_file)
+          if actual != expected:
+              raise SystemExit(f"Embedded entitlements differ: expected={expected!r}, actual={actual!r}")
+          PY
 
       - name: Package executable app
         shell: bash
@@ -123,9 +156,23 @@ jobs:
             "$RUNNER_TEMP/JarvisRelease/Jarvis-macOS-11-universal.zip"
           cd "$RUNNER_TEMP/JarvisRelease"
           shasum -a 256 Jarvis-macOS-11-universal.zip > Jarvis-macOS-11-universal.zip.sha256
+          shasum -a 256 -c Jarvis-macOS-11-universal.zip.sha256
+
+          EXTRACTED_PATH="$RUNNER_TEMP/JarvisExtracted"
+          mkdir -p "$EXTRACTED_PATH"
+          ditto -x -k Jarvis-macOS-11-universal.zip "$EXTRACTED_PATH"
+          EXTRACTED_APP="$EXTRACTED_PATH/Jarvis.app"
+          EXTRACTED_EXECUTABLE="$EXTRACTED_APP/Contents/MacOS/Jarvis"
+          test -x "$EXTRACTED_EXECUTABLE"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$EXTRACTED_APP/Contents/Info.plist")" = "com.nandan.jarvis"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$EXTRACTED_APP/Contents/Info.plist")" = "11.0"
+          EXTRACTED_ARCHITECTURES="$(lipo -archs "$EXTRACTED_EXECUTABLE")"
+          [[ " $EXTRACTED_ARCHITECTURES " == *" x86_64 "* ]]
+          [[ " $EXTRACTED_ARCHITECTURES " == *" arm64 "* ]]
+          codesign --verify --deep --strict --all-architectures --verbose=2 "$EXTRACTED_APP"
 
       - name: Upload build artifact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v7.0.1
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: Jarvis-${{ inputs.tag }}-macOS-11-universal
           path: |
@@ -147,18 +194,22 @@ jobs:
 
           This download contains a universal `Jarvis.app` for Intel and Apple silicon Macs with a macOS 11.0 deployment target.
 
-          Important: this automated build is ad-hoc signed, not Developer ID signed or Apple-notarized. On first launch, Control-click `Jarvis.app`, choose Open, and approve the macOS prompt. Review README.md before entering credentials or enabling hands-free mode.
+          Download `Jarvis-macOS-11-universal.zip` (not GitHub's source archive), unzip it, then move the complete `Jarvis.app` to `/Applications` or `~/Applications`.
 
-          Credentials are entered in Jarvis Settings and stored in macOS Keychain. A Gemini API key is required for cloud reasoning; a Home Assistant URL and long-lived token are required for smart-home control.
+          Important: this automated build is ad-hoc signed, not Developer ID signed or Apple-notarized. On first launch, Control-click `Jarvis.app`, choose Open, and approve the macOS prompt. Jarvis is a menu-bar app with no Dock icon; look for `◆ Jarvis`, then grant Microphone, Speech Recognition, and Automation permissions when prompted.
+
+          Credentials are entered in Jarvis Settings and stored in macOS Keychain. A Gemini API key is required for cloud reasoning; a Home Assistant URL and long-lived token are required for smart-home control. Launch at login takes effect at your next login.
           EOF
-          printf '\nBuilt from commit `%s`.\n' "$GITHUB_SHA" >> "$NOTES_FILE"
+          RELEASE_SHA="$(git rev-parse HEAD)"
+          CHECKSUM="$(awk '{print $1}' "$RUNNER_TEMP/JarvisRelease/Jarvis-macOS-11-universal.zip.sha256")"
+          printf '\nSHA-256: `%s`\n\nBuilt from commit `%s`.\n' "$CHECKSUM" "$RELEASE_SHA" >> "$NOTES_FILE"
 
           RELEASE_ARGUMENTS=(
             "$RELEASE_TAG"
             "$RUNNER_TEMP/JarvisRelease/Jarvis-macOS-11-universal.zip"
             "$RUNNER_TEMP/JarvisRelease/Jarvis-macOS-11-universal.zip.sha256"
             --repo "$GITHUB_REPOSITORY"
-            --target "$GITHUB_SHA"
+            --target "$RELEASE_SHA"
             --title "Jarvis $RELEASE_TAG"
             --notes-file "$NOTES_FILE"
             --verify-tag=false
