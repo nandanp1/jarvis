@@ -15,6 +15,7 @@ final class JarvisSettingsViewController: NSViewController {
 
     private let geminiAPIKeyField = NSSecureTextField(frame: .zero)
     private let geminiModelField = NSTextField(string: "")
+    private let defaultLocationField = NSTextField(string: "")
     private let geminiTestButton = NSButton(title: "Test Connection", target: nil, action: nil)
     private let geminiProgress = NSProgressIndicator()
     private let geminiStatusLabel = JarvisSettingsUI.statusLabel()
@@ -68,6 +69,7 @@ final class JarvisSettingsViewController: NSViewController {
         updateVoiceControlAvailability()
 
         geminiModelField.stringValue = preferences.geminiModel
+        defaultLocationField.stringValue = preferences.defaultLocation
         homeAssistantURLField.stringValue = preferences.homeAssistantURL
         geminiAPIKeyField.stringValue = ""
         homeAssistantTokenField.stringValue = ""
@@ -86,6 +88,7 @@ final class JarvisSettingsViewController: NSViewController {
 
         wakePhraseField.placeholderString = "Hey Jarvis"
         wakePhraseField.toolTip = "Jarvis also recognizes its name by itself."
+        launchAtLoginCheckbox.toolTip = "Enabling installs a Big Sur LaunchAgent that takes effect at your next login."
 
         voiceEnabledCheckbox.target = self
         voiceEnabledCheckbox.action = #selector(voiceEnabledChanged)
@@ -103,6 +106,8 @@ final class JarvisSettingsViewController: NSViewController {
         geminiAPIKeyField.placeholderString = "Paste a Gemini API key"
         geminiAPIKeyField.toolTip = "Stored in macOS Keychain only after Save Settings is chosen."
         geminiModelField.placeholderString = "Gemini model identifier"
+        defaultLocationField.placeholderString = "City, region or postal code"
+        defaultLocationField.toolTip = "Used for weather and other local questions when you do not name a place."
 
         homeAssistantURLField.placeholderString = "http://homeassistant.local:8123"
         homeAssistantTokenField.placeholderString = "Paste a long-lived access token"
@@ -257,6 +262,7 @@ final class JarvisSettingsViewController: NSViewController {
         )
         card.add(JarvisSettingsUI.formRow(label: "Gemini API key", control: geminiAPIKeyField))
         card.add(JarvisSettingsUI.formRow(label: "Gemini model", control: geminiModelField))
+        card.add(JarvisSettingsUI.formRow(label: "Home location", control: defaultLocationField))
         card.add(JarvisSettingsUI.actionRow([geminiProgress, geminiTestButton]))
         card.add(geminiStatusLabel)
         return card
@@ -366,6 +372,7 @@ final class JarvisSettingsViewController: NSViewController {
         preferences.speakingRate = speakingRateSlider.floatValue
         preferences.activationSoundsEnabled = activationSoundCheckbox.state == .on
         preferences.geminiModel = model
+        preferences.defaultLocation = defaultLocationField.stringValue
         preferences.homeAssistantURL = homeAssistantURL
 
         let requestedLaunchAtLogin = launchAtLoginCheckbox.state == .on
@@ -604,6 +611,7 @@ final class JarvisSettingsViewController: NSViewController {
             speakingRate: preferences.speakingRate,
             activationSoundsEnabled: preferences.activationSoundsEnabled,
             geminiModel: preferences.geminiModel,
+            defaultLocation: preferences.defaultLocation,
             homeAssistantURL: preferences.homeAssistantURL
         )
     }
@@ -643,7 +651,11 @@ final class JarvisSettingsViewController: NSViewController {
         guard let components = URLComponents(string: value),
               let scheme = components.scheme?.lowercased(),
               scheme == "http" || scheme == "https",
-              components.host?.isEmpty == false else { return false }
+              components.host?.isEmpty == false,
+              components.user == nil,
+              components.password == nil,
+              components.query == nil,
+              components.fragment == nil else { return false }
         return true
     }
 }

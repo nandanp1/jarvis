@@ -11,6 +11,7 @@ actor HomeAssistantProvider: HomeControlProvider {
     private let service: HomeAssistantService
     private var devicesByID: [String: SmartDevice] = [:]
     private var statesByID: [String: DeviceState] = [:]
+    private var systemTemperatureUnit: String?
 
     init(service: HomeAssistantService) {
         self.service = service
@@ -23,10 +24,35 @@ actor HomeAssistantProvider: HomeControlProvider {
 
     func listDevices() async throws -> [SmartDevice] {
         let entities = try await service.fetchStates()
-        let mapped = entities.compactMap(Self.device(from:))
+        do {
+            let configuration = try await service.fetchConfiguration()
+            systemTemperatureUnit = configuration.unitSystem?.temperature
+        } catch {
+            // State discovery remains useful on older or restricted servers.
+        }
+        let areas: [String: String]
+        do {
+            areas = try await service.fetchEntityAreas()
+        } catch {
+            areas = [:]
+        }
+        let mapped = entities.compactMap { entity -> SmartDevice? in
+            guard let device = Self.device(from: entity) else { return nil }
+            guard let assignedArea = areas[entity.entityID] else { return device }
+            return SmartDevice(
+                id: device.id,
+                name: device.name,
+                room: assignedArea,
+                type: device.type,
+                capabilities: device.capabilities
+            )
+        }
         devicesByID = Dictionary(uniqueKeysWithValues: mapped.map { ($0.id, $0) })
         for entity in entities where devicesByID[entity.entityID] != nil {
-            statesByID[entity.entityID] = Self.deviceState(from: entity)
+            statesByID[entity.entityID] = Self.deviceState(
+                from: entity,
+                fallbackTemperatureUnit: systemTemperatureUnit
+            )
         }
         return mapped.sorted {
             let leftRoom = $0.room ?? ""
@@ -43,7 +69,7 @@ actor HomeAssistantProvider: HomeControlProvider {
         guard Self.device(from: entity) != nil else {
             throw HomeControlError.unsupportedDevice(deviceID)
         }
-        let state = Self.deviceState(from: entity)
+        let state = Self.deviceState(from: entity, fallbackTemperatureUnit: systemTemperatureUnit)
         statesByID[deviceID] = state
         return state
     }
@@ -69,9 +95,14 @@ actor HomeAssistantProvider: HomeControlProvider {
             throw HomeControlError.unsupportedDevice(executable.deviceID)
         }
         devicesByID[device.id] = device
-        statesByID[device.id] = Self.deviceState(from: before)
+        statesByID[device.id] = Self.deviceState(from: before, fallbackTemperatureUnit: systemTemperatureUnit)
 
-        let invocation = try Self.invocation(for: executable, device: device, entity: before)
+        let invocation = try Self.invocation(
+            for: executable,
+            device: device,
+            entity: before,
+            fallbackTemperatureUnit: systemTemperatureUnit
+        )
         if let capability = invocation.requiredCapability,
            !device.capabilities.contains(capability) {
             throw HomeControlError.unsupportedCommand(
@@ -121,7 +152,10 @@ actor HomeAssistantProvider: HomeControlProvider {
         return SmartDevice(id: entity.entityID, name: name, room: room, type: type, capabilities: capabilities)
     }
 
-    static func deviceState(from entity: HomeAssistantEntity) -> DeviceState {
+    static func deviceState(
+        from entity: HomeAssistantEntity,
+        fallbackTemperatureUnit: String? = nil
+    ) -> DeviceState {
         let rawState = entity.state.lowercased()
         let domain = domainName(for: entity.entityID)
         let unavailable = rawState == "unavailable" || rawState == "unknown"
@@ -175,8 +209,12 @@ actor HomeAssistantProvider: HomeControlProvider {
             color: color,
             colorTemperatureKelvin: kelvin,
             fanSpeedPercent: attributes["percentage"]?.doubleValue.map(boundedPercent),
-            currentTemperatureCelsius: attributes["current_temperature"]?.doubleValue,
-            targetTemperatureCelsius: attributes["temperature"]?.doubleValue,
+            currentTemperatureCelsius: attributes["current_temperature"]?.doubleValue.map {
+                celsiusTemperature($0, attributes: attributes, fallbackUnit: fallbackTemperatureUnit)
+            },
+            targetTemperatureCelsius: attributes["temperature"]?.doubleValue.map {
+                celsiusTemperature($0, attributes: attributes, fallbackUnit: fallbackTemperatureUnit)
+            },
             hvacMode: domain == "climate" ? rawState : nil,
             mediaState: domain == "media_player" ? rawState : nil,
             volumePercent: volume,
@@ -190,15 +228,16 @@ actor HomeAssistantProvider: HomeControlProvider {
         of command: HomeCommand,
         startingWith entity: HomeAssistantEntity
     ) async throws -> DeviceState {
-        var state = Self.deviceState(from: entity)
+        var state = Self.deviceState(from: entity, fallbackTemperatureUnit: systemTemperatureUnit)
         if Self.isConfirmed(command, by: state) {
             return state
         }
 
-        for _ in 0..<4 {
-            try await Task.sleep(nanoseconds: 250_000_000)
+        let delays: [UInt64] = [250_000_000, 500_000_000, 1_000_000_000, 1_500_000_000, 2_000_000_000]
+        for delay in delays {
+            try await Task.sleep(nanoseconds: delay)
             let refreshed = try await service.fetchState(entityID: command.deviceID)
-            state = Self.deviceState(from: refreshed)
+            state = Self.deviceState(from: refreshed, fallbackTemperatureUnit: systemTemperatureUnit)
             if Self.isConfirmed(command, by: state) {
                 return state
             }
@@ -212,7 +251,8 @@ actor HomeAssistantProvider: HomeControlProvider {
     private static func invocation(
         for command: HomeCommand,
         device: SmartDevice,
-        entity: HomeAssistantEntity
+        entity: HomeAssistantEntity,
+        fallbackTemperatureUnit: String?
     ) throws -> ServiceInvocation {
         let domain = domainName(for: device.id)
         switch command {
@@ -229,6 +269,14 @@ actor HomeAssistantProvider: HomeControlProvider {
         case .setBrightness(_, let percent):
             try validatePercent(percent)
             try requireDomain("light", actual: domain, device: device)
+            if percent == 0 {
+                return ServiceInvocation(
+                    domain: "light",
+                    name: "turn_off",
+                    fields: [:],
+                    requiredCapability: .brightness
+                )
+            }
             return ServiceInvocation(
                 domain: "light",
                 name: "turn_on",
@@ -275,17 +323,37 @@ actor HomeAssistantProvider: HomeControlProvider {
             guard celsius.isFinite, (-100.0...100.0).contains(celsius) else {
                 throw HomeControlError.invalidValue("The requested temperature is outside the supported range.")
             }
-            if let minimum = entity.attributes["min_temp"]?.doubleValue, celsius < minimum {
-                throw HomeControlError.invalidValue("\(device.name) cannot be set below \(minimum)°.")
+            if let minimum = entity.attributes["min_temp"]?.doubleValue {
+                let minimumCelsius = celsiusTemperature(
+                    minimum,
+                    attributes: entity.attributes,
+                    fallbackUnit: fallbackTemperatureUnit
+                )
+                if celsius < minimumCelsius {
+                    throw HomeControlError.invalidValue("\(device.name) cannot be set below \(minimumCelsius)°C.")
+                }
             }
-            if let maximum = entity.attributes["max_temp"]?.doubleValue, celsius > maximum {
-                throw HomeControlError.invalidValue("\(device.name) cannot be set above \(maximum)°.")
+            if let maximum = entity.attributes["max_temp"]?.doubleValue {
+                let maximumCelsius = celsiusTemperature(
+                    maximum,
+                    attributes: entity.attributes,
+                    fallbackUnit: fallbackTemperatureUnit
+                )
+                if celsius > maximumCelsius {
+                    throw HomeControlError.invalidValue("\(device.name) cannot be set above \(maximumCelsius)°C.")
+                }
             }
             try requireDomain("climate", actual: domain, device: device)
             return ServiceInvocation(
                 domain: "climate",
                 name: "set_temperature",
-                fields: ["temperature": .number(celsius)],
+                fields: [
+                    "temperature": .number(homeAssistantTemperature(
+                        fromCelsius: celsius,
+                        attributes: entity.attributes,
+                        fallbackUnit: fallbackTemperatureUnit
+                    ))
+                ],
                 requiredCapability: .targetTemperature
             )
         case .setHVACMode(_, let mode):
@@ -337,7 +405,12 @@ actor HomeAssistantProvider: HomeControlProvider {
             }
             return ServiceInvocation(domain: "alarm_control_panel", name: serviceName, fields: fields, requiredCapability: capability)
         case .confirmed(let inner):
-            return try invocation(for: inner.commandAfterConfirmation, device: device, entity: entity)
+            return try invocation(
+                for: inner.commandAfterConfirmation,
+                device: device,
+                entity: entity,
+                fallbackTemperatureUnit: fallbackTemperatureUnit
+            )
         }
     }
 
@@ -393,6 +466,7 @@ actor HomeAssistantProvider: HomeControlProvider {
         case .turnOff:
             return state.isOn == false
         case .setBrightness(_, let percent):
+            if percent == 0, state.isOn == false { return true }
             return approximately(state.brightnessPercent, percent, tolerance: 3)
         case .setColor(_, let requested):
             guard let actual = state.color else { return false }
@@ -422,23 +496,25 @@ actor HomeAssistantProvider: HomeControlProvider {
             }
         case .cover(_, let action):
             switch action {
-            case .open: return state.rawState == "open" || state.rawState == "opening"
-            case .close: return state.rawState == "closed" || state.rawState == "closing"
+            case .open: return state.rawState == "open"
+            case .close: return state.rawState == "closed"
             case .stop: return state.rawState != "opening" && state.rawState != "closing"
             case .setPosition(let percent):
                 if approximately(state.coverPositionPercent, percent, tolerance: 3) { return true }
-                return state.rawState == "opening" || state.rawState == "closing"
+                if percent == 0 { return state.rawState == "closed" }
+                if percent == 100 { return state.rawState == "open" }
+                return false
             }
         case .lock:
-            return state.rawState == "locked" || state.rawState == "locking"
+            return state.rawState == "locked"
         case .unlock:
-            return state.rawState == "unlocked" || state.rawState == "unlocking"
+            return state.rawState == "unlocked"
         case .alarm(_, let action, _):
             switch action {
-            case .armHome: return state.rawState == "armed_home" || state.rawState == "arming"
-            case .armAway: return state.rawState == "armed_away" || state.rawState == "arming"
-            case .armNight: return state.rawState == "armed_night" || state.rawState == "arming"
-            case .disarm: return state.rawState == "disarmed" || state.rawState == "pending"
+            case .armHome: return state.rawState == "armed_home"
+            case .armAway: return state.rawState == "armed_away"
+            case .armNight: return state.rawState == "armed_night"
+            case .disarm: return state.rawState == "disarmed"
             case .trigger: return state.rawState == "triggered"
             }
         case .confirmed(let inner):
@@ -469,15 +545,30 @@ actor HomeAssistantProvider: HomeControlProvider {
         case "switch":
             values.insert(.power)
         case "fan":
-            values.formUnion([.power, .fanSpeed])
+            values.insert(.power)
+            if supportedFeatures & 1 != 0 || attributes["percentage"] != nil || attributes["percentage_step"] != nil {
+                values.insert(.fanSpeed)
+            }
         case "climate":
-            values.formUnion([.targetTemperature, .hvacMode])
+            if supportedFeatures & 1 != 0 || attributes["temperature"] != nil {
+                values.insert(.targetTemperature)
+            }
+            if !(attributes["hvac_modes"]?.stringArrayValue ?? []).isEmpty {
+                values.insert(.hvacMode)
+            }
         case "scene", "script":
             values.insert(.activate)
         case "media_player":
-            values.formUnion([.power, .playback, .volume])
+            if supportedFeatures & (128 | 256) != 0 { values.insert(.power) }
+            if supportedFeatures & (1 | 16 | 32 | 512 | 4096 | 16_384) != 0 {
+                values.insert(.playback)
+            }
+            if supportedFeatures & (4 | 8 | 1_024) != 0 ||
+                attributes["volume_level"] != nil || attributes["is_volume_muted"] != nil {
+                values.insert(.volume)
+            }
         case "cover":
-            values.insert(.openClose)
+            if supportedFeatures & (1 | 2 | 8) != 0 { values.insert(.openClose) }
             if supportedFeatures & 4 != 0 || attributes["current_position"] != nil {
                 values.insert(.position)
             }
@@ -526,6 +617,35 @@ actor HomeAssistantProvider: HomeControlProvider {
 
     private static func boundedPercent(_ value: Double) -> Int {
         min(100, max(0, Int(value.rounded())))
+    }
+
+    static func celsiusTemperature(
+        _ value: Double,
+        attributes: [String: JSONValue],
+        fallbackUnit: String? = nil
+    ) -> Double {
+        guard isFahrenheit(attributes: attributes, fallbackUnit: fallbackUnit) else { return value }
+        return (value - 32.0) * (5.0 / 9.0)
+    }
+
+    static func homeAssistantTemperature(
+        fromCelsius value: Double,
+        attributes: [String: JSONValue],
+        fallbackUnit: String? = nil
+    ) -> Double {
+        guard isFahrenheit(attributes: attributes, fallbackUnit: fallbackUnit) else { return value }
+        return (value * (9.0 / 5.0)) + 32.0
+    }
+
+    private static func isFahrenheit(
+        attributes: [String: JSONValue],
+        fallbackUnit: String?
+    ) -> Bool {
+        let unit = attributes["temperature_unit"]?.stringValue
+            ?? attributes["unit_of_measurement"]?.stringValue
+            ?? fallbackUnit
+            ?? ""
+        return unit.uppercased().contains("F")
     }
 
     private static func approximately(_ actual: Int?, _ requested: Int, tolerance: Int) -> Bool {

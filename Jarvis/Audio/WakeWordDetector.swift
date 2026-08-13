@@ -6,6 +6,53 @@ struct WakeWordMatch: Equatable {
     let trailingCommand: String?
 }
 
+/// Separates recognition-result policy from Speech.framework so phrase-only
+/// partials can wait briefly for a same-utterance command and be unit tested.
+final class WakeWordTailResolver {
+    enum Decision: Equatable {
+        case none
+        case cancelPending
+        case waitForTail(WakeWordMatch)
+        case emit(WakeWordMatch)
+    }
+
+    private var pendingMatch: WakeWordMatch?
+
+    var isWaiting: Bool { pendingMatch != nil }
+
+    func consume(
+        transcript: String,
+        configuredPhrase: String,
+        isFinal: Bool
+    ) -> Decision {
+        guard let match = NativeSpeechWakeWordDetector.match(
+            in: transcript,
+            configuredPhrase: configuredPhrase
+        ) else {
+            guard pendingMatch != nil else { return .none }
+            pendingMatch = nil
+            return .cancelPending
+        }
+
+        if match.trailingCommand != nil || isFinal {
+            pendingMatch = nil
+            return .emit(match)
+        }
+
+        pendingMatch = match
+        return .waitForTail(match)
+    }
+
+    func expire() -> WakeWordMatch? {
+        defer { pendingMatch = nil }
+        return pendingMatch
+    }
+
+    func cancel() {
+        pendingMatch = nil
+    }
+}
+
 protocol WakeWordDetector: AnyObject {
     var isRunning: Bool { get }
     var usesOnDeviceRecognition: Bool { get }
@@ -34,11 +81,14 @@ final class NativeSpeechWakeWordDetector: WakeWordDetector {
     private let microphone: MicrophoneService
     private let recognizer: SFSpeechRecognizer?
     private let phraseProvider: () -> String
+    private let tailGraceDuration: TimeInterval
     private let queue = DispatchQueue(label: "com.nandan.jarvis.wake-word")
+    private let tailResolver = WakeWordTailResolver()
     private var request: SFSpeechAudioBufferRecognitionRequest?
     private var task: SFSpeechRecognitionTask?
     private var sessionID: UUID?
     private var rotationWorkItem: DispatchWorkItem?
+    private var tailGraceWorkItem: DispatchWorkItem?
     private var wakeCallback: ((WakeWordMatch) -> Void)?
     private var errorCallback: ((Error) -> Void)?
     private var desiredRunning = false
@@ -50,10 +100,12 @@ final class NativeSpeechWakeWordDetector: WakeWordDetector {
     init(
         microphone: MicrophoneService,
         phraseProvider: @escaping () -> String,
-        locale: Locale = Locale(identifier: "en-US")
+        locale: Locale = Locale(identifier: "en-US"),
+        tailGraceDuration: TimeInterval = 0.8
     ) {
         self.microphone = microphone
         self.phraseProvider = phraseProvider
+        self.tailGraceDuration = max(0, tailGraceDuration)
         recognizer = SFSpeechRecognizer(locale: locale)
     }
 
@@ -100,13 +152,24 @@ final class NativeSpeechWakeWordDetector: WakeWordDetector {
         task = recognizer.recognitionTask(with: request) { [weak self] result, error in
             self?.queue.async {
                 guard let self = self, self.sessionID == sessionID else { return }
-                if let transcript = result?.bestTranscription.formattedString,
-                   let match = Self.match(in: transcript, configuredPhrase: self.phraseProvider()) {
-                    let callback = self.wakeCallback
-                    self.desiredRunning = false
-                    self.stopSessionLocked()
-                    DispatchQueue.main.async { callback?(match) }
-                    return
+                if let result = result {
+                    let decision = self.tailResolver.consume(
+                        transcript: result.bestTranscription.formattedString,
+                        configuredPhrase: self.phraseProvider(),
+                        isFinal: result.isFinal
+                    )
+                    switch decision {
+                    case .none:
+                        break
+                    case .cancelPending:
+                        self.cancelTailGraceLocked()
+                    case .waitForTail(_):
+                        self.scheduleTailGraceLocked(sessionID: sessionID)
+                        return
+                    case .emit(let match):
+                        self.emitWakeLocked(match)
+                        return
+                    }
                 }
 
                 if let error = error, self.desiredRunning {
@@ -138,6 +201,7 @@ final class NativeSpeechWakeWordDetector: WakeWordDetector {
     private func stopSessionLocked() {
         rotationWorkItem?.cancel()
         rotationWorkItem = nil
+        cancelTailGraceLocked()
         if let sessionID = sessionID { microphone.stop(sessionID: sessionID) }
         request?.endAudio()
         task?.cancel()
@@ -145,6 +209,33 @@ final class NativeSpeechWakeWordDetector: WakeWordDetector {
         task = nil
         sessionID = nil
         running = false
+    }
+
+    private func scheduleTailGraceLocked(sessionID: UUID) {
+        guard tailGraceWorkItem == nil else { return }
+        let grace = DispatchWorkItem { [weak self] in
+            guard let self = self,
+                  self.desiredRunning,
+                  self.sessionID == sessionID,
+                  let match = self.tailResolver.expire() else { return }
+            self.tailGraceWorkItem = nil
+            self.emitWakeLocked(match)
+        }
+        tailGraceWorkItem = grace
+        queue.asyncAfter(deadline: .now() + tailGraceDuration, execute: grace)
+    }
+
+    private func cancelTailGraceLocked() {
+        tailGraceWorkItem?.cancel()
+        tailGraceWorkItem = nil
+        tailResolver.cancel()
+    }
+
+    private func emitWakeLocked(_ match: WakeWordMatch) {
+        let callback = wakeCallback
+        desiredRunning = false
+        stopSessionLocked()
+        DispatchQueue.main.async { callback?(match) }
     }
 
     private func report(_ error: Error) {

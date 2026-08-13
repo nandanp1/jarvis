@@ -16,7 +16,7 @@ While idle, Jarvis permits hands-free wake listening only when `SFSpeechRecogniz
 
 After activation, one `AVAudioEngine` microphone owner supplies Speech.framework and adaptive voice activity detection. Roughly 1.25 seconds of silence finalizes the command, with separate no-speech and maximum-duration safeguards. The recognized text—not idle audio—is sent to Gemini. Jarvis suspends both wake and command recognition while `NSSpeechSynthesizer` speaks, waits through an acoustic cooldown, and only then resumes wake listening.
 
-Gemini receives explicit, allowlisted tools. Home and Mac actions are executed locally, their actual result is returned to Gemini, and only then can Jarvis report success. Independent calls in one Gemini turn support requests such as “turn off the desk light, turn on the fan, and tell me tomorrow’s weather.” Current questions can use Gemini’s Google Search tool.
+Gemini receives explicit, allowlisted tools. Home and Mac actions are executed locally, verified against refreshed state where the target exposes it, and returned to Gemini before Jarvis reports the outcome. Independent calls in one Gemini turn support requests such as “turn off the desk light, turn on the fan, and tell me tomorrow’s weather.” Gemini 3 models can combine Jarvis functions with Google Search for current questions.
 
 ## Requirements
 
@@ -55,7 +55,10 @@ node scripts/generate-xcode-project.js
 1. Open **Jarvis Settings → AI**.
 2. Paste a Gemini API key.
 3. Keep the current default model (`gemini-3.6-flash`) or enter another supported model ID.
-4. Choose **Test Connection**, then **Save Settings**.
+4. Enter a home location for weather questions that do not name a place.
+5. Choose **Test Connection**, then **Save Settings**.
+
+Jarvis keeps custom function calling available for other compatible model IDs. The combined Google Search plus function-tool path requires a Gemini 3 model, so older models will not receive the built-in Search tool.
 
 The API key is stored only as a macOS Keychain generic-password item. Jarvis sends it in the `x-goog-api-key` header, never in a URL, preference, source file, or log. Gemini requests use the current Interactions API with `store: false`; Jarvis keeps only a bounded in-memory history. **Clear Conversation** removes that context.
 
@@ -78,7 +81,7 @@ Enable Jarvis in both lists and relaunch it. Removing or disconnecting the activ
 4. Enter the URL, for example `http://homeassistant.local:8123`, and paste the token.
 5. Choose **Test Connection** or **Refresh Devices**, confirm the real inventory, then save.
 
-The URL is a normal preference; the bearer token is stored only in Keychain. Jarvis uses real `/api/states` discovery and `/api/services/<domain>/<service>` calls, then refreshes affected entity state before reporting success. Unlocking, opening an access cover/garage, and disabling or triggering an alarm require an explicit spoken confirmation.
+The URL is a normal preference; the bearer token is stored only in Keychain. Jarvis uses real `/api/states` discovery, the fixed `/api/template` area lookup, and `/api/services/<domain>/<service>` calls, then refreshes affected entity state before reporting a verifiable change. Unlocking, moving an access cover/garage, disabling or triggering an alarm, and invoking an opaque scene or script require an explicit spoken confirmation.
 
 Supported controls include power, brightness, RGB color, color temperature, fan percentage, thermostat target/mode, scenes, scripts, media playback/volume, and covers. The local fallback grammar handles common power, brightness, fan, routine, volume, and mute commands without Gemini when Home Assistant remains reachable on the LAN.
 
@@ -106,7 +109,7 @@ On Big Sur, launch at login is implemented with a user LaunchAgent. Jarvis must 
 - waits at least 60 seconds between restarts;
 - does not grow stdout/stderr logs.
 
-A normal **Quit Jarvis** exits successfully and is not restarted. Disabling the setting unloads and removes the owned LaunchAgent.
+Enabling installs the agent atomically for the **next login**; it deliberately does not start a second copy of an already-running Jarvis. A normal **Quit Jarvis** exits successfully and is not restarted. Disabling removes the owned registration before unloading it; if the current Jarvis process is launchd-managed, that unload may also close the app.
 
 ## Architecture
 
@@ -136,6 +139,7 @@ Detailed design and contributor guidance live in:
 - **Home Assistant connection fails:** test `http://host:8123/api/` from the same Mac, check the token, and prefer a stable LAN hostname or reserved address.
 - **A Google Home device is missing:** ensure the entity actually appears and works in Home Assistant; Google Home alone is not an import source.
 - **Launch at login cannot be enabled:** move `Jarvis.app` to `/Applications` or `~/Applications` first.
+- **Launch at login did not change immediately:** log out and back in once after enabling it; the agent is intentionally activated at the next login.
 - **Mac automation is denied:** allow Jarvis under **Security & Privacy → Automation** when macOS prompts.
 
 ## Privacy and security
@@ -147,6 +151,6 @@ Detailed design and contributor guidance live in:
 - Gemini and Home Assistant credentials live in Keychain; **Clear Credentials** deletes all Jarvis-owned entries.
 - Home Assistant authorization headers and all recognized secret markers are redacted from logs.
 - Gemini cannot execute a shell. Mac operations are compiled, typed, and allowlisted.
-- Security-sensitive home commands require confirmation and retain only the pending typed action.
+- Security-sensitive home commands require confirmation and retain only a bounded queue of pending typed actions.
 
 The automated suite validates parsing, state transitions, device mapping/resolution, and project invariants. Microphone behavior, Apple permission prompts, wake reliability, speaker feedback, LaunchAgent recovery, and physical smart-device state must still be tested on the intended Big Sur Mac before calling an installation production-ready.

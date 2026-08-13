@@ -18,6 +18,8 @@ final class MenuBarController: NSObject {
     private let talkItem = NSMenuItem(title: "Talk to Jarvis", action: #selector(talk), keyEquivalent: "t")
     private let stopItem = NSMenuItem(title: "Stop Listening", action: #selector(stopListening), keyEquivalent: "")
     private let handsFreeItem = NSMenuItem(title: "Hands-Free Listening", action: #selector(toggleHandsFree), keyEquivalent: "")
+    private var currentState: AssistantState = .idle
+    private var handsFreeEnabled = false
 
     override init() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -26,7 +28,8 @@ final class MenuBarController: NSObject {
     }
 
     func update(state: AssistantState, lastRequest: String?, deviceCount: Int?) {
-        stateItem.title = "● \(state.statusText)"
+        currentState = state
+        refreshStateTitle()
         stateItem.isEnabled = false
         lastRequestItem.title = "Last request: \(lastRequest.map { "\"\($0)\"" } ?? "—")"
         lastRequestItem.isEnabled = false
@@ -42,7 +45,14 @@ final class MenuBarController: NSObject {
     }
 
     func updateHandsFree(_ enabled: Bool) {
+        handsFreeEnabled = enabled
         handsFreeItem.state = enabled ? .on : .off
+        refreshStateTitle()
+    }
+
+    private func refreshStateTitle() {
+        let title = currentState == .idle && handsFreeEnabled ? "Listening" : currentState.statusText
+        stateItem.title = "● \(title)"
     }
 
     private func configureStatusItem() {

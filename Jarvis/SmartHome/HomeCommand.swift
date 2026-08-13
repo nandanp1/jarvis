@@ -31,6 +31,7 @@ enum SensitiveAction: String, Codable, Hashable {
     case openAccessCover = "open_access_cover"
     case disableAlarm = "disable_alarm"
     case triggerAlarm = "trigger_alarm"
+    case runAutomation = "run_automation"
 }
 
 indirect enum HomeCommand: Hashable {
@@ -75,6 +76,12 @@ indirect enum HomeCommand: Hashable {
             return .unlockDoor
         case .cover(_, .open):
             return .openAccessCover
+        case .cover(_, .setPosition):
+            return .openAccessCover
+        case .activateScene, .runScript:
+            // Scenes and scripts can contain lock, garage, or alarm actions.
+            // Without a user-reviewed allowlist, confirmation is the safe default.
+            return .runAutomation
         case .alarm(_, .disarm, _):
             return .disableAlarm
         case .alarm(_, .trigger, _):
@@ -95,11 +102,20 @@ indirect enum HomeCommand: Hashable {
         case .unlockDoor:
             return "Are you sure you want me to unlock this door?"
         case .openAccessCover:
-            return "Are you sure you want me to open this cover or garage door?"
+            return "Are you sure you want me to move this cover or garage door?"
         case .disableAlarm:
             return "Are you sure you want me to disable the alarm?"
         case .triggerAlarm:
             return "Are you sure you want me to trigger the alarm?"
+        case .runAutomation:
+            switch self {
+            case .activateScene:
+                return "Are you sure you want me to activate this scene? It may contain security actions."
+            case .runScript:
+                return "Are you sure you want me to run this Home Assistant script? It may contain security actions."
+            default:
+                return "Are you sure you want me to run this Home Assistant automation?"
+            }
         case nil:
             return nil
         }

@@ -98,9 +98,10 @@ struct SmartDevice {
 }
 ```
 
-The friendly name comes from `friendly_name` when available. Area/room metadata
-is retained when the API supplies it or when the user adds a local alias. The
-raw entity ID remains stable for tool execution.
+The friendly name comes from `friendly_name` when available. Jarvis asks Home
+Assistant's fixed template endpoint for `area_name(entity_id)`, with conservative
+attribute/name inference only as a fallback. The raw entity ID remains stable
+for tool execution. There is no separate Jarvis alias editor in this version.
 
 Supported domains and expected operations are:
 
@@ -148,7 +149,7 @@ fixtures.
 
 Resolution is deterministic and happens before execution. The resolver
 normalizes case and punctuation, considers friendly names, entity IDs, room,
-type, and configured aliases, and then ranks exact matches above token matches.
+and type, and then ranks exact matches above token matches.
 
 For example:
 
@@ -156,12 +157,12 @@ For example:
 entity_id:     light.nandan_bedroom_ceiling_01
 friendly_name: Bedroom Ceiling
 room:          Bedroom
-aliases:       ceiling light
 ```
 
 may match “turn off my ceiling light” or “turn off the bedroom ceiling.” If two
-devices remain equally plausible, Jarvis asks for clarification. It must never
-silently choose a security-sensitive device.
+devices remain equally plausible, the resolver returns no device; Gemini can
+then ask for clarification. It must never silently choose a security-sensitive
+device.
 
 “All” commands first resolve a bounded device set, such as all lights in the
 bedroom, then execute and report per-device outcomes. Partial success is not
@@ -206,10 +207,12 @@ preserved when one step depends on another.
 
 ## Sensitive actions
 
-Locks, garage doors, alarm/security controls, and equivalent operations require
-an explicit confirmation. The pending confirmation stores a typed, short-lived
-command—not an arbitrary model string—and expires on timeout, cancellation, or
-an unrelated request.
+Locks, garage doors, alarm/security controls, opaque scenes/scripts, and
+equivalent operations require an explicit confirmation. Cover positioning is
+also conservative because an entity may be a garage door. Pending confirmation
+stores a bounded typed queue—not arbitrary model strings—and its timeout starts
+after the prompt finishes speaking. It expires on timeout, cancellation, Clear
+Conversation, or an unrelated request.
 
 ```text
 User:   Unlock the front door.
@@ -230,7 +233,7 @@ turn <device or room device> off
 turn all lights off
 set <light> to <0...100> percent
 turn <fan> on|off
-activate <routine or scene>
+activate <built-in routine>
 ```
 
 This path does not require Gemini. It still requires speech transcription and a
@@ -243,6 +246,22 @@ Routines expand a stable name such as `Goodnight` into typed steps. A routine
 may include home commands, safe Mac commands, scene/script activation, and a
 final spoken phrase. Device IDs are validated against discovery when the
 routine runs, because entities can be renamed or removed.
+
+The built-in routines expect these Home Assistant scene IDs:
+
+| Jarvis routine | Home Assistant entity |
+| --- | --- |
+| Goodnight | `scene.goodnight` |
+| Gaming | `scene.gaming` |
+| Movie | `scene.movie` |
+| Study | `scene.study` |
+| Wake Up | `scene.wake_up` |
+| Away | `scene.away` |
+
+Create the desired scene under that ID before using its routine. Because Jarvis
+cannot inspect every downstream action embedded in a scene, these routines ask
+for confirmation and report Home Assistant's accepted/failed outcome; physical
+verification remains part of setup.
 
 Recommended behavior on partial failure:
 

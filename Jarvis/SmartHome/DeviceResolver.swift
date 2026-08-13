@@ -46,17 +46,26 @@ final class DeviceResolver {
         let normalized = Self.normalize(reference)
         let queryTokens = Self.significantTokens(in: normalized)
         let requestedType = Self.deviceTypeToken(in: queryTokens)
-        let room = preferredRoom.map(Self.normalize)
+        let room = preferredRoom.map(Self.normalize) ?? Self.roomReference(in: normalized, devices: devices)
+        var unresolvedQualifiers = queryTokens
+        unresolvedQualifiers.subtract(["all", "everything"])
+        if let requestedType = requestedType { unresolvedQualifiers.remove(requestedType) }
+        if let room = room {
+            unresolvedQualifiers.subtract(Self.significantTokens(in: room))
+        }
+        guard unresolvedQualifiers.isEmpty else { return [] }
 
         return devices.filter { device in
             if let requestedType = requestedType,
                !Self.typeTokens(for: device.type).contains(requestedType) {
                 return false
             }
-            if let room = room, let deviceRoom = device.room,
-               !Self.normalize(deviceRoom).contains(room),
-               !room.contains(Self.normalize(deviceRoom)) {
-                return false
+            if let room = room {
+                guard let deviceRoom = device.room else { return false }
+                let normalizedDeviceRoom = Self.normalize(deviceRoom)
+                if !normalizedDeviceRoom.contains(room), !room.contains(normalizedDeviceRoom) {
+                    return false
+                }
             }
             return true
         }
@@ -126,10 +135,15 @@ final class DeviceResolver {
         }
     }
 
-    func clearRecentDevices() {
+    func clearRecentContext() {
         lock.lock()
         recentDeviceIDs.removeAll(keepingCapacity: true)
         lock.unlock()
+    }
+
+    /// Kept for callers compiled against the original resolver API.
+    func clearRecentDevices() {
+        clearRecentContext()
     }
 
     private func mostRecentDevice(among devices: [SmartDevice]) -> SmartDevice? {
@@ -204,6 +218,14 @@ final class DeviceResolver {
 
     private static func deviceTypeToken(in tokens: Set<String>) -> String? {
         tokens.first(where: { genericTypeTokens.contains($0) })
+    }
+
+    private static func roomReference(in normalized: String, devices: [SmartDevice]) -> String? {
+        let rooms = Set(devices.compactMap { $0.room.map(Self.normalize) })
+        return rooms.sorted { $0.count > $1.count }.first {
+            normalized == $0 || normalized.hasPrefix($0 + " ") ||
+                normalized.hasSuffix(" " + $0) || normalized.contains(" " + $0 + " ")
+        }
     }
 
     private static func isRecentReference(_ normalized: String) -> Bool {

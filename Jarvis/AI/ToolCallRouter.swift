@@ -1,25 +1,71 @@
 import Foundation
 
 final class ToolCallRouter {
+    private enum PendingConfirmationAction {
+        case home(command: HomeCommand, description: String)
+        case routine(Routine)
+
+        var description: String {
+            switch self {
+            case .home(_, let description):
+                return description
+            case .routine(let routine):
+                return "run the \(routine.name) routine"
+            }
+        }
+    }
+
+    private struct ConfirmationOutcome {
+        let description: String
+        let succeeded: Bool
+        let message: String
+        let details: [String: Any]
+
+        init(
+            description: String,
+            succeeded: Bool,
+            message: String,
+            details: [String: Any] = [:]
+        ) {
+            self.description = description
+            self.succeeded = succeeded
+            self.message = message
+            self.details = details
+        }
+
+        var data: [String: Any] {
+            var result: [String: Any] = [
+                "description": description,
+                "success": succeeded,
+                "message": message
+            ]
+            details.forEach { result[$0.key] = $0.value }
+            return result
+        }
+    }
+
     private let homeProvider: HomeControlProvider
     private let resolver: DeviceResolver
     private let routineExecutor: RoutineExecutor
     private let macCommands: MacCommandService
+    private let systemStatus: SystemStatusService
     private let queue = DispatchQueue(label: "com.nandan.jarvis.tool-confirmation")
-    private var pendingCommand: HomeCommand?
-    private var pendingCommandDescription: String?
+    private var pendingConfirmations: [PendingConfirmationAction] = []
     private var pendingExpiry: DispatchWorkItem?
+    private var pendingGeneration = 0
 
     init(
         homeProvider: HomeControlProvider,
         resolver: DeviceResolver = DeviceResolver(),
         routineExecutor: RoutineExecutor,
-        macCommands: MacCommandService
+        macCommands: MacCommandService,
+        systemStatus: SystemStatusService = SystemStatusService()
     ) {
         self.homeProvider = homeProvider
         self.resolver = resolver
         self.routineExecutor = routineExecutor
         self.macCommands = macCommands
+        self.systemStatus = systemStatus
     }
 
     var tools: [GeminiToolDefinition] {
@@ -44,14 +90,15 @@ final class ToolCallRouter {
             GeminiToolDefinition(name: "set_fan_speed", description: "Sets a fan speed from 0 to 100 percent.", parameters: ["type": "object", "properties": ["device": referenceProperty, "percent": ["type": "integer", "minimum": 0, "maximum": 100]], "required": ["device", "percent"]]),
             GeminiToolDefinition(name: "set_temperature", description: "Sets a thermostat target temperature in Celsius.", parameters: ["type": "object", "properties": ["device": referenceProperty, "celsius": ["type": "number"]], "required": ["device", "celsius"]]),
             GeminiToolDefinition(name: "set_hvac_mode", description: "Sets a thermostat HVAC mode such as heat, cool, auto, or off.", parameters: ["type": "object", "properties": ["device": referenceProperty, "mode": ["type": "string"]], "required": ["device", "mode"]]),
-            GeminiToolDefinition(name: "activate_scene", description: "Activates a Home Assistant scene.", parameters: referenceSchema),
-            GeminiToolDefinition(name: "run_home_script", description: "Runs a Home Assistant script.", parameters: referenceSchema),
+            GeminiToolDefinition(name: "activate_scene", description: "Requests a Home Assistant scene. Jarvis requires explicit confirmation because a scene may contain security actions.", parameters: referenceSchema),
+            GeminiToolDefinition(name: "run_home_script", description: "Requests a Home Assistant script. Jarvis requires explicit confirmation because a script may contain security actions.", parameters: referenceSchema),
             GeminiToolDefinition(name: "control_media_player", description: "Controls a Home Assistant media player. Volume requires percent.", parameters: ["type": "object", "properties": ["device": referenceProperty, "action": ["type": "string", "enum": ["play", "pause", "stop", "next", "previous", "mute", "unmute", "volume"]], "percent": ["type": "integer", "minimum": 0, "maximum": 100]], "required": ["device", "action"]]),
-            GeminiToolDefinition(name: "control_cover", description: "Opens, closes, stops, or positions a cover. Opening requires user confirmation because the entity may be an access door.", parameters: ["type": "object", "properties": ["device": referenceProperty, "action": ["type": "string", "enum": ["open", "close", "stop", "position"]], "percent": ["type": "integer", "minimum": 0, "maximum": 100]], "required": ["device", "action"]]),
+            GeminiToolDefinition(name: "control_cover", description: "Opens, closes, stops, or positions a cover. Opening or positioning requires explicit user confirmation because the entity may be an access door.", parameters: ["type": "object", "properties": ["device": referenceProperty, "action": ["type": "string", "enum": ["open", "close", "stop", "position"]], "percent": ["type": "integer", "minimum": 0, "maximum": 100]], "required": ["device", "action"]]),
             GeminiToolDefinition(name: "lock_device", description: "Locks a smart lock.", parameters: referenceSchema),
             GeminiToolDefinition(name: "unlock_device", description: "Requests unlocking a smart lock. Jarvis always asks the user for explicit confirmation before execution.", parameters: referenceSchema),
             GeminiToolDefinition(name: "control_alarm", description: "Arms, disarms, or triggers an alarm control panel. Disarm and trigger always require confirmation.", parameters: ["type": "object", "properties": ["device": referenceProperty, "action": ["type": "string", "enum": ["arm_home", "arm_away", "arm_night", "disarm", "trigger"]], "code": ["type": "string"]], "required": ["device", "action"]]),
             GeminiToolDefinition(name: "run_routine", description: "Runs a configured Jarvis routine such as Goodnight, Gaming, Movie, Study, Wake Up, or Away.", parameters: ["type": "object", "properties": ["name": ["type": "string"]], "required": ["name"]]),
+            GeminiToolDefinition(name: "get_mac_status", description: "Reads this Mac's battery, power, volume, architecture, and operating-system status without changing anything.", parameters: ["type": "object", "properties": [:]]),
             GeminiToolDefinition(name: "set_mac_volume", description: "Sets this Mac's output volume from 0 to 100 percent.", parameters: ["type": "object", "properties": ["percent": ["type": "integer", "minimum": 0, "maximum": 100]], "required": ["percent"]]),
             GeminiToolDefinition(name: "mute_mac", description: "Mutes or unmutes this Mac.", parameters: ["type": "object", "properties": ["muted": ["type": "boolean"]], "required": ["muted"]]),
             GeminiToolDefinition(name: "open_mac_application", description: "Opens an installed Mac application by name through the allowlisted Mac command service.", parameters: ["type": "object", "properties": ["name": ["type": "string"]], "required": ["name"]])
@@ -63,10 +110,24 @@ final class ToolCallRouter {
             switch call.name {
             case "list_home_devices":
                 let devices = try await homeProvider.listDevices()
-                let descriptions = devices.map { device -> [String: Any] in
+                let returnedDevices = Array(devices.prefix(100))
+                let descriptions = returnedDevices.map { device -> [String: Any] in
                     ["id": device.id, "name": device.name, "room": device.room ?? "", "type": device.type.rawValue]
                 }
-                return .init(success: true, message: "Found \(devices.count) devices.", data: ["devices": descriptions])
+                let truncated = returnedDevices.count < devices.count
+                let message = truncated
+                    ? "Found \(devices.count) devices. Returning the first \(returnedDevices.count)."
+                    : "Found \(devices.count) devices."
+                return .init(
+                    success: true,
+                    message: message,
+                    data: [
+                        "devices": descriptions,
+                        "total_count": devices.count,
+                        "returned_count": returnedDevices.count,
+                        "truncated": truncated
+                    ]
+                )
             case "get_device_state":
                 let device = try await resolveDevice(arguments: call.arguments)
                 let state = try await homeProvider.getState(deviceID: device.id)
@@ -139,6 +200,9 @@ final class ToolCallRouter {
                 let name = try string("name", in: call.arguments)
                 let report = try await executeRoutine(named: name)
                 return .init(success: report.succeeded, message: report.spokenMessage)
+            case "get_mac_status":
+                let status = await systemStatus.currentStatus()
+                return .init(success: true, message: "Read the current Mac status.", data: systemStatusData(status))
             case "set_mac_volume":
                 _ = try await macCommands.execute(.setVolume(percent: try integer("percent", in: call.arguments)))
                 return .init(success: true, message: "Mac volume changed.")
@@ -157,7 +221,14 @@ final class ToolCallRouter {
             }
         } catch {
             if case HomeControlError.confirmationRequired(let prompt) = error {
-                return .init(success: false, message: prompt, data: ["requires_confirmation": true])
+                return .init(
+                    success: false,
+                    message: prompt,
+                    data: [
+                        "requires_confirmation": true,
+                        "pending_confirmation_count": pendingConfirmationCount
+                    ]
+                )
             }
             return .init(success: false, message: error.localizedDescription)
         }
@@ -168,97 +239,187 @@ final class ToolCallRouter {
             throw HomeControlError.unsupportedCommand("I couldn’t match that to an offline command.")
         }
         var messages: [String] = []
+        var failures: [Error] = []
+        var confirmationPrompts: [String] = []
         for intent in intents {
-            switch intent {
-            case .power(let reference, let on, let all):
-                let devices = try await homeProvider.listDevices()
-                let matches = all
-                    ? resolver.resolveAll(reference, among: devices).filter { $0.capabilities.contains(.power) }
-                    : resolver.resolve(reference, among: devices).map { [$0] } ?? []
-                guard !matches.isEmpty else { throw HomeControlError.deviceNotFound(reference) }
-                for device in matches {
+            do {
+                switch intent {
+                case .power(let reference, let on, let all):
+                    let devices = try await homeProvider.listDevices()
+                    let matches = all
+                        ? resolver.resolveAll(reference, among: devices).filter { $0.capabilities.contains(.power) }
+                        : resolver.resolve(reference, among: devices).map { [$0] } ?? []
+                    guard !matches.isEmpty else { throw HomeControlError.deviceNotFound(reference) }
+                    var changedDevices: [SmartDevice] = []
+                    var deviceFailures: [Error] = []
+                    for device in matches {
+                        do {
+                            try await homeProvider.execute(command: on ? .turnOn(deviceID: device.id) : .turnOff(deviceID: device.id))
+                            resolver.recordUsage(of: device)
+                            changedDevices.append(device)
+                        } catch {
+                            deviceFailures.append(error)
+                        }
+                    }
+                    guard !changedDevices.isEmpty else {
+                        throw deviceFailures.first ?? HomeControlError.providerUnavailable("No devices were changed.")
+                    }
+                    let target = changedDevices.count == 1 ? changedDevices[0].name : "\(changedDevices.count) devices"
+                    var message = "Turned \(target) \(on ? "on" : "off")."
+                    if !deviceFailures.isEmpty {
+                        message += " \(deviceFailures.count) other device action\(deviceFailures.count == 1 ? "" : "s") failed."
+                    }
+                    messages.append(message)
+
+                case .brightness(let reference, let percent):
+                    let device = try await resolveDevice(reference: reference)
+                    try await homeProvider.execute(command: .setBrightness(deviceID: device.id, percent: percent))
+                    resolver.recordUsage(of: device)
+                    messages.append("Set \(device.name) to \(percent) percent.")
+
+                case .fan(let reference, let on):
+                    let device = try await resolveDevice(reference: reference)
                     try await homeProvider.execute(command: on ? .turnOn(deviceID: device.id) : .turnOff(deviceID: device.id))
                     resolver.recordUsage(of: device)
+                    messages.append("Turned \(device.name) \(on ? "on" : "off").")
+
+                case .routine(let name):
+                    let report = try await executeRoutine(named: name)
+                    if report.successfulActions == 0, let failure = report.failures.first {
+                        throw HomeControlError.unsupportedCommand(report.spokenMessage + " " + failure.message)
+                    }
+                    messages.append(report.spokenMessage)
+
+                case .macVolume(let percent):
+                    _ = try await macCommands.execute(.setVolume(percent: percent))
+                    messages.append("Set Mac volume to \(percent) percent.")
+
+                case .macMute(let muted):
+                    _ = try await macCommands.execute(muted ? .mute : .unmute)
+                    messages.append(muted ? "Muted the Mac." : "Unmuted the Mac.")
                 }
-                messages.append("Turned \(matches.count == 1 ? matches[0].name : "\(matches.count) devices") \(on ? "on" : "off").")
-            case .brightness(let reference, let percent):
-                let device = try await resolveDevice(reference: reference)
-                try await homeProvider.execute(command: .setBrightness(deviceID: device.id, percent: percent))
-                resolver.recordUsage(of: device)
-                messages.append("Set \(device.name) to \(percent) percent.")
-            case .fan(let reference, let on):
-                let device = try await resolveDevice(reference: reference)
-                try await homeProvider.execute(command: on ? .turnOn(deviceID: device.id) : .turnOff(deviceID: device.id))
-                resolver.recordUsage(of: device)
-                messages.append("Turned \(device.name) \(on ? "on" : "off").")
-            case .routine(let name):
-                let report = try await executeRoutine(named: name)
-                messages.append(report.spokenMessage)
-            case .macVolume(let percent):
-                _ = try await macCommands.execute(.setVolume(percent: percent))
-                messages.append("Set Mac volume to \(percent) percent.")
-            case .macMute(let muted):
-                _ = try await macCommands.execute(muted ? .mute : .unmute)
-                messages.append(muted ? "Muted the Mac." : "Unmuted the Mac.")
+            } catch HomeControlError.confirmationRequired(let prompt) {
+                confirmationPrompts.append(prompt)
+            } catch {
+                failures.append(error)
             }
+        }
+
+        if !confirmationPrompts.isEmpty {
+            let prompts = confirmationPrompts.reduce(into: [String]()) { unique, prompt in
+                if !unique.contains(prompt) { unique.append(prompt) }
+            }
+            let count = pendingConfirmationCount
+            messages.append(
+                prompts.joined(separator: " ") +
+                    " \(count) action\(count == 1 ? " is" : "s are") waiting for confirmation."
+            )
+        }
+
+        guard !messages.isEmpty else {
+            throw failures.first ?? HomeControlError.providerUnavailable("No offline action was completed.")
+        }
+        if !failures.isEmpty {
+            let details = failures.map { $0.localizedDescription }.joined(separator: " ")
+            let outcome = confirmationPrompts.isEmpty && !messages.isEmpty
+                ? "I completed the other action\(messages.count == 1 ? "" : "s")"
+                : "I kept the confirmation request pending"
+            messages.append("\(outcome), but \(failures.count) action\(failures.count == 1 ? "" : "s") failed. \(details)")
         }
         return messages.joined(separator: " ")
     }
 
     func confirmPendingAction(confirmed: Bool) async -> GeminiToolExecutionResult? {
-        let pending: (HomeCommand, String)? = queue.sync {
-            defer {
-                pendingExpiry?.cancel()
-                pendingExpiry = nil
-                pendingCommand = nil
-                pendingCommandDescription = nil
-            }
-            guard let command = pendingCommand else { return nil }
-            return (command, pendingCommandDescription ?? "perform the action")
+        let pending = takePendingConfirmations()
+        guard !pending.isEmpty else { return nil }
+
+        guard confirmed else {
+            let count = pending.count
+            return .init(
+                success: false,
+                message: count == 1 ? "Cancelled the pending action." : "Cancelled \(count) pending actions.",
+                data: ["cancelled": true, "cancelled_action_count": count]
+            )
         }
-        guard let pending = pending else { return nil }
-        guard confirmed else { return .init(success: false, message: "Cancelled.") }
-        do {
-            try await homeProvider.execute(command: pending.0.confirmedByUser())
-            return .init(success: true, message: "Confirmed and completed: \(pending.1).")
-        } catch {
-            return .init(success: false, message: error.localizedDescription)
+
+        var outcomes: [ConfirmationOutcome] = []
+        for action in pending {
+            outcomes.append(await executeConfirmed(action))
+        }
+
+        let completedCount = outcomes.filter(\.succeeded).count
+        let failedOutcomes = outcomes.filter { !$0.succeeded }
+        let message: String
+        if outcomes.count == 1 {
+            message = outcomes[0].message
+        } else if failedOutcomes.isEmpty {
+            message = "Completed all \(outcomes.count) confirmed actions. \(outcomes.map(\.message).joined(separator: " "))"
+        } else {
+            message = "I fully completed \(completedCount) of \(outcomes.count) confirmed actions. \(outcomes.map(\.message).joined(separator: " "))"
+        }
+
+        return .init(
+            success: failedOutcomes.isEmpty,
+            message: message,
+            data: [
+                "confirmed_action_count": outcomes.count,
+                "completed_action_count": completedCount,
+                "failed_action_count": failedOutcomes.count,
+                "results": outcomes.map(\.data)
+            ]
+        )
+    }
+
+    var hasPendingConfirmation: Bool { queue.sync { !pendingConfirmations.isEmpty } }
+
+    /// Starts the confirmation expiry only after the confirmation prompt has
+    /// finished speaking. Enqueuing an additional sensitive action disarms the
+    /// current timer so the caller can speak an updated prompt before rearming it.
+    @discardableResult
+    func armPendingConfirmationTimeout(seconds: TimeInterval) -> Bool {
+        guard seconds.isFinite, seconds > 0, seconds <= 300 else { return false }
+        return queue.sync {
+            guard !pendingConfirmations.isEmpty else { return false }
+            pendingExpiry?.cancel()
+            pendingGeneration &+= 1
+            let generation = pendingGeneration
+            let expiry = DispatchWorkItem { [weak self] in
+                guard let self = self, self.pendingGeneration == generation else { return }
+                self.pendingConfirmations.removeAll(keepingCapacity: true)
+                self.pendingExpiry = nil
+                self.pendingGeneration &+= 1
+            }
+            pendingExpiry = expiry
+            queue.asyncAfter(deadline: .now() + seconds, execute: expiry)
+            return true
         }
     }
 
-    var hasPendingConfirmation: Bool { queue.sync { pendingCommand != nil } }
-
     func cancelPendingAction() {
         queue.sync {
-            pendingExpiry?.cancel()
-            pendingExpiry = nil
-            pendingCommand = nil
-            pendingCommandDescription = nil
+            clearPendingConfirmationsLocked()
         }
+    }
+
+    func clearContext() {
+        cancelPendingAction()
+        resolver.clearRecentContext()
     }
 
     private func executeHome(_ unresolvedCommand: HomeCommand, description: String) async throws -> GeminiToolExecutionResult {
         let device = try await resolveDevice(reference: unresolvedCommand.deviceID)
         let command = replacingDeviceID(in: unresolvedCommand, with: device.id)
         if command.requiresConfirmation {
-            queue.sync {
-                pendingExpiry?.cancel()
-                pendingCommand = command
-                pendingCommandDescription = "\(description) for \(device.name)"
-                let expiry = DispatchWorkItem { [weak self] in
-                    self?.pendingCommand = nil
-                    self?.pendingCommandDescription = nil
-                    self?.pendingExpiry = nil
-                }
-                pendingExpiry = expiry
-                queue.asyncAfter(deadline: .now() + 30, execute: expiry)
-            }
+            enqueue(.home(command: command, description: "\(description) for \(device.name)"))
             throw HomeControlError.confirmationRequired(command.confirmationPrompt ?? "Please confirm this action.")
         }
         try await homeProvider.execute(command: command)
         resolver.recordUsage(of: device)
-        let refreshed = try await homeProvider.getState(deviceID: device.id)
-        return .init(success: true, message: "\(device.name) updated successfully.", data: stateData(refreshed))
+        return .init(
+            success: true,
+            message: "\(device.name) updated successfully.",
+            data: ["device_id": device.id, "executed": true]
+        )
     }
 
     private func resolveDeviceID(_ arguments: [String: Any]) throws -> String {
@@ -308,6 +469,36 @@ final class ToolCallRouter {
         return result
     }
 
+    private func systemStatusData(_ status: SystemStatus) -> [String: Any] {
+        var result: [String: Any] = [
+            "hardware_architecture": status.hardwareArchitecture.rawValue,
+            "executable_architecture": status.executableArchitecture.rawValue,
+            "running_under_rosetta": status.isRunningUnderRosetta,
+            "operating_system": status.operatingSystem,
+            "processor_count": status.processorCount,
+            "physical_memory_bytes": status.physicalMemoryBytes,
+            "system_uptime_seconds": status.systemUptime
+        ]
+        if let battery = status.battery {
+            var batteryData: [String: Any] = [
+                "percentage": battery.percentage,
+                "is_charging": battery.isCharging,
+                "power_source": battery.powerSource.rawValue
+            ]
+            if let minutes = battery.timeRemainingMinutes {
+                batteryData["time_remaining_minutes"] = minutes
+            }
+            result["battery"] = batteryData
+        }
+        if let audio = status.audioOutput {
+            result["audio_output"] = [
+                "volume_percent": audio.volumePercent,
+                "is_muted": audio.isMuted
+            ]
+        }
+        return result
+    }
+
     private func executeRoutine(named rawName: String) async throws -> RoutineExecutionResult {
         let normalized = rawName.lowercased()
             .replacingOccurrences(of: "_", with: " ")
@@ -319,7 +510,88 @@ final class ToolCallRouter {
         }) else {
             throw HomeControlError.unsupportedCommand("I couldn't find a \(rawName) routine.")
         }
+        if routine.requiresConfirmation {
+            enqueue(.routine(routine))
+            throw HomeControlError.confirmationRequired(
+                routine.confirmationPrompt ?? "Are you sure you want me to run the \(routine.name) routine?"
+            )
+        }
         return try await routineExecutor.execute(routine, policy: .continueAfterFailure)
+    }
+
+    private var pendingConfirmationCount: Int {
+        queue.sync { pendingConfirmations.count }
+    }
+
+    private func enqueue(_ action: PendingConfirmationAction) {
+        queue.sync {
+            pendingExpiry?.cancel()
+            pendingExpiry = nil
+            pendingGeneration &+= 1
+            pendingConfirmations.append(action)
+        }
+    }
+
+    private func takePendingConfirmations() -> [PendingConfirmationAction] {
+        queue.sync {
+            let pending = pendingConfirmations
+            clearPendingConfirmationsLocked()
+            return pending
+        }
+    }
+
+    private func clearPendingConfirmationsLocked() {
+        pendingExpiry?.cancel()
+        pendingExpiry = nil
+        pendingConfirmations.removeAll(keepingCapacity: true)
+        pendingGeneration &+= 1
+    }
+
+    private func executeConfirmed(_ action: PendingConfirmationAction) async -> ConfirmationOutcome {
+        switch action {
+        case .home(let command, let description):
+            do {
+                try await homeProvider.execute(command: command.confirmedByUser())
+                resolver.recordUsage(deviceID: command.deviceID)
+                return ConfirmationOutcome(
+                    description: description,
+                    succeeded: true,
+                    message: "Confirmed and completed: \(description)."
+                )
+            } catch {
+                return ConfirmationOutcome(
+                    description: description,
+                    succeeded: false,
+                    message: "I couldn't \(description): \(error.localizedDescription)"
+                )
+            }
+
+        case .routine(let routine):
+            do {
+                let report = try await routineExecutor.execute(
+                    routine,
+                    confirmedByUser: true,
+                    policy: .continueAfterFailure
+                )
+                return ConfirmationOutcome(
+                    description: action.description,
+                    succeeded: report.succeeded,
+                    message: report.spokenMessage,
+                    details: [
+                        "routine_action_count": routine.actions.count,
+                        "completed_routine_action_count": report.successfulActions,
+                        "failed_routine_action_count": report.failures.count,
+                        "routine_failures": report.failures.map(\.message)
+                    ]
+                )
+            } catch {
+                return ConfirmationOutcome(
+                    description: action.description,
+                    succeeded: false,
+                    message: "I couldn't run \(routine.name): \(error.localizedDescription)"
+                )
+            }
+        }
     }
 
     private func application(named rawName: String) -> MacApplication? {

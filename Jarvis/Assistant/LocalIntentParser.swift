@@ -9,9 +9,33 @@ enum LocalIntent: Equatable {
     case macMute(Bool)
 }
 
+struct LocalIntentParseResult: Equatable {
+    let intents: [LocalIntent]
+    let unrecognizedFragments: [String]
+
+    var isFullyRecognized: Bool {
+        !intents.isEmpty && unrecognizedFragments.isEmpty
+    }
+}
+
 final class LocalIntentParser {
     func parse(_ input: String) -> [LocalIntent] {
-        splitCommands(input).compactMap { parseSingle($0) }
+        parseResult(input).intents
+    }
+
+    func parseResult(_ input: String) -> LocalIntentParseResult {
+        var intents: [LocalIntent] = []
+        var unrecognizedFragments: [String] = []
+        for fragment in splitCommands(input) {
+            let normalized = normalize(fragment)
+            guard !normalized.isEmpty else { continue }
+            if let intent = parseSingle(normalized) {
+                intents.append(intent)
+            } else {
+                unrecognizedFragments.append(normalized)
+            }
+        }
+        return LocalIntentParseResult(intents: intents, unrecognizedFragments: unrecognizedFragments)
     }
 
     private func parseSingle(_ rawInput: String) -> LocalIntent? {
@@ -39,16 +63,16 @@ final class LocalIntentParser {
         }
         if let match = captures(#"^(?:turn|switch)\s+(.+?)\s+(on|off)$"#, in: input) {
             let reference = cleanedReference(match[0])
-            let all = reference.contains("all") || reference.contains("everything")
-            if reference.contains("fan") {
+            let all = isAllReference(reference)
+            if isFanReference(reference) {
                 return .fan(reference: reference, on: match[1] == "on")
             }
             return .power(reference: reference, on: match[1] == "on", all: all)
         }
         if let match = captures(#"^(?:turn|switch)\s+(on|off)\s+(.+)$"#, in: input) {
             let reference = cleanedReference(match[1])
-            let all = reference.contains("all") || reference.contains("everything")
-            if reference.contains("fan") {
+            let all = isAllReference(reference)
+            if isFanReference(reference) {
                 return .fan(reference: reference, on: match[0] == "on")
             }
             return .power(reference: reference, on: match[0] == "on", all: all)
@@ -63,7 +87,7 @@ final class LocalIntentParser {
             .replacingOccurrences(of: #",\s*"#, with: " | ", options: .regularExpression)
             .replacingOccurrences(of: ";", with: " | ")
         let separated = commaSeparated.replacingOccurrences(
-            of: #"\s+and\s+(?=(?:turn|switch|set|activate|run|start|mute|unmute)\b)"#,
+            of: #"\s+and\s+(?=(?:turn|switch|set|activate|run|start|mute|unmute|what|who|how|when|where|why|tell|check)\b)"#,
             with: " | ",
             options: [.regularExpression, .caseInsensitive]
         )
@@ -80,6 +104,16 @@ final class LocalIntentParser {
         value
             .replacingOccurrences(of: #"^(?:my|the)\s+"#, with: "", options: .regularExpression)
             .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func isAllReference(_ value: String) -> Bool {
+        let tokens = Set(value.split(separator: " ").map(String.init))
+        return tokens.contains("all") || tokens.contains("everything")
+    }
+
+    private func isFanReference(_ value: String) -> Bool {
+        let tokens = Set(value.split(separator: " ").map(String.init))
+        return tokens.contains("fan") || tokens.contains("fans")
     }
 
     private func integerCapture(_ pattern: String, in input: String) -> Int? {

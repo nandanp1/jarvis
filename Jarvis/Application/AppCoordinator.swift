@@ -24,7 +24,8 @@ final class AppCoordinator {
             return try self.keychain.string(for: .geminiAPIKey) ?? ""
         },
         modelProvider: { [weak self] in self?.preferences.geminiModel ?? "gemini-3.6-flash" },
-        maximumTurnsProvider: { [weak self] in self?.preferences.maxConversationTurns ?? 12 }
+        maximumTurnsProvider: { [weak self] in self?.preferences.maxConversationTurns ?? 12 },
+        locationProvider: { [weak self] in self?.preferences.defaultLocation ?? "" }
     )
     private lazy var wakeDetector: WakeWordDetector = NativeSpeechWakeWordDetector(
         microphone: microphone,
@@ -53,14 +54,17 @@ final class AppCoordinator {
     private var handsFreeEnabled = false
     private var started = false
     private var errorRecoveryWorkItem: DispatchWorkItem?
+    private var wakeRetryWorkItem: DispatchWorkItem?
+    private var wakeRetryAttempt = 0
+    private var conversationGeneration = 0
 
     init(preferences: Preferences = .shared) {
         self.preferences = preferences
     }
 
-    func start() {
+    func start(presentWindow: Bool = true) {
         guard !started else {
-            windowController.present()
+            if presentWindow { windowController.present() }
             return
         }
         started = true
@@ -68,9 +72,10 @@ final class AppCoordinator {
         microphone.onConfigurationChange = { [weak self] in
             self?.handleError(MicrophoneError.unavailable)
         }
-        menuBarController.updateLaunchAtLogin(preferences.launchAtLogin)
+        menuBarController.updateLaunchAtLogin(launchAtLogin.isEnabled)
         publishState()
-        windowController.present()
+        if presentWindow { windowController.present() }
+        discoverDevicesAtStartup()
         if preferences.startListeningAutomatically {
             requestHandsFreeStart()
         }
@@ -82,6 +87,7 @@ final class AppCoordinator {
         wakeDetector.stop()
         speechSynthesis.stop()
         microphone.stop()
+        wakeRetryWorkItem?.cancel()
         JarvisLog.info("Jarvis application is shutting down")
     }
 
@@ -104,10 +110,15 @@ final class AppCoordinator {
     }
 
     private func manualTalk() {
-        guard stateMachine.state != .listening else {
+        if stateMachine.state == .listening {
             stopListening()
             return
         }
+        if stateMachine.state == .speaking {
+            speechSynthesis.stop()
+            _ = stateMachine.transition(to: .idle)
+        }
+        guard stateMachine.state == .idle || stateMachine.state == .error else { return }
         AudioPermissions.request { [weak self] status in
             guard let self = self else { return }
             switch status {
@@ -120,17 +131,33 @@ final class AppCoordinator {
     }
 
     private func stopListening() {
-        speechRecognition.stop()
+        speechRecognition.stop { [weak self] in
+            guard let self = self, self.handsFreeEnabled, self.stateMachine.state == .idle else { return }
+            self.startWakeDetection()
+        }
         _ = stateMachine.transition(to: .idle)
         publishState()
     }
 
     private func clearConversation() {
+        conversationGeneration &+= 1
+        let generation = conversationGeneration
+        speechRecognition.stop { [weak self] in
+            guard let self = self,
+                  self.conversationGeneration == generation,
+                  self.handsFreeEnabled,
+                  self.stateMachine.state == .idle else { return }
+            self.startWakeDetection()
+        }
+        speechSynthesis.stop()
+        wakeDetector.stop()
         lastRequest = nil
         lastResponse = nil
         conversation.clear()
         gemini.clearConversation()
+        toolRouter.clearContext()
         windowController.contentController.clearConversation()
+        _ = stateMachine.transition(to: .idle)
         publishState()
     }
 
@@ -168,12 +195,13 @@ final class AppCoordinator {
     }
 
     private func handleErrorMessage(_ message: String) {
+        wakeRetryWorkItem?.cancel()
         wakeDetector.stop()
         speechRecognition.stop()
         _ = stateMachine.transition(to: .error)
         windowController.contentController.update(state: .error, userText: nil, jarvisText: message, detail: "Needs attention")
         menuBarController.update(state: .error, lastRequest: lastRequest, deviceCount: nil)
-        JarvisLog.error(message)
+        JarvisLog.error("Jarvis entered a recoverable error state")
         errorRecoveryWorkItem?.cancel()
         let recovery = DispatchWorkItem { [weak self] in
             guard let self = self, self.stateMachine.state == .error else { return }
@@ -189,13 +217,20 @@ final class AppCoordinator {
         wakeDetector.stop()
         speechRecognition.stop(cancelled: false)
         conversation.append(role: .user, text: transcript)
+        let requestGeneration = conversationGeneration
 
         if toolRouter.hasPendingConfirmation, let confirmation = confirmationValue(from: transcript) {
             _ = stateMachine.transition(to: .processing)
             publishState(detail: confirmation ? "Confirming action…" : "Cancelling action…")
             Task { [weak self] in
-                guard let self = self, let result = await self.toolRouter.confirmPendingAction(confirmed: confirmation) else { return }
-                await MainActor.run { self.deliver(result.message) }
+                guard let self = self else { return }
+                let result = await self.toolRouter.confirmPendingAction(confirmed: confirmation)
+                let message = result?.message ?? "That confirmation expired. Please ask me again if you still want the action."
+                await MainActor.run {
+                    guard self.conversationGeneration == requestGeneration else { return }
+                    self.gemini.appendLocalTurn(user: transcript, assistant: message)
+                    self.deliver(message)
+                }
             }
             return
         }
@@ -209,12 +244,30 @@ final class AppCoordinator {
 
         Task { [weak self] in
             guard let self = self else { return }
+            let localParse = self.localIntentParser.parseResult(transcript)
+
+            if localParse.isFullyRecognized {
+                await self.executeLocal(
+                    intents: localParse.intents,
+                    transcript: transcript,
+                    hasUnrecognizedRemainder: false,
+                    generation: requestGeneration
+                )
+                return
+            }
+
+            if !self.networkMonitor.isInternetLikelyAvailable {
+                await self.executeLocal(
+                    intents: localParse.intents,
+                    transcript: transcript,
+                    hasUnrecognizedRemainder: !localParse.unrecognizedFragments.isEmpty,
+                    generation: requestGeneration
+                )
+                return
+            }
+
+            var toolResults: [GeminiToolExecutionResult] = []
             do {
-                if !self.networkMonitor.isInternetLikelyAvailable {
-                    let response = try await self.toolRouter.executeLocal(self.localIntentParser.parse(transcript))
-                    await MainActor.run { self.deliver(response) }
-                    return
-                }
                 let response = try await self.gemini.respond(
                     to: transcript,
                     tools: self.toolRouter.tools,
@@ -227,17 +280,61 @@ final class AppCoordinator {
                     },
                     execute: { [weak self] call in
                         guard let self = self else { return .init(success: false, message: "Jarvis stopped.") }
-                        return await self.toolRouter.execute(call)
+                        let result = await self.toolRouter.execute(call)
+                        toolResults.append(result)
+                        return result
                     }
                 )
-                await MainActor.run { self.deliver(response.text) }
-            } catch let primaryError {
-                do {
-                    let fallback = try await self.toolRouter.executeLocal(self.localIntentParser.parse(transcript))
-                    await MainActor.run { self.deliver(fallback) }
-                } catch {
-                    await MainActor.run { self.handleError(primaryError) }
+                await MainActor.run {
+                    guard self.conversationGeneration == requestGeneration else { return }
+                    self.deliver(response.text)
                 }
+            } catch let primaryError {
+                if !toolResults.isEmpty {
+                    let details = toolResults.map(\.message).joined(separator: " ")
+                    let message = details + " I couldn't complete the final Gemini response."
+                    await MainActor.run {
+                        guard self.conversationGeneration == requestGeneration else { return }
+                        self.gemini.appendLocalTurn(user: transcript, assistant: message)
+                        self.deliver(message)
+                    }
+                } else if !localParse.intents.isEmpty {
+                    await self.executeLocal(
+                        intents: localParse.intents,
+                        transcript: transcript,
+                        hasUnrecognizedRemainder: !localParse.unrecognizedFragments.isEmpty,
+                        generation: requestGeneration
+                    )
+                } else {
+                    await MainActor.run {
+                        guard self.conversationGeneration == requestGeneration else { return }
+                        self.handleError(primaryError)
+                    }
+                }
+            }
+        }
+    }
+
+    private func executeLocal(
+        intents: [LocalIntent],
+        transcript: String,
+        hasUnrecognizedRemainder: Bool,
+        generation: Int
+    ) async {
+        do {
+            var response = try await toolRouter.executeLocal(intents)
+            if hasUnrecognizedRemainder {
+                response += " I completed the local part, but I couldn't reach Gemini for the rest."
+            }
+            await MainActor.run {
+                guard conversationGeneration == generation else { return }
+                gemini.appendLocalTurn(user: transcript, assistant: response)
+                deliver(response)
+            }
+        } catch {
+            await MainActor.run {
+                guard conversationGeneration == generation else { return }
+                handleError(error)
             }
         }
     }
@@ -263,8 +360,15 @@ final class AppCoordinator {
     }
 
     private func finishSpeaking() {
+        guard !speechSynthesis.isSpeaking else {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in self?.finishSpeaking() }
+            return
+        }
         _ = stateMachine.transition(to: .idle)
         publishState()
+        if toolRouter.hasPendingConfirmation {
+            toolRouter.armPendingConfirmationTimeout(seconds: 45)
+        }
         if handsFreeEnabled { startWakeDetection() }
     }
 
@@ -274,6 +378,7 @@ final class AppCoordinator {
             switch status {
             case .authorized:
                 self.handsFreeEnabled = true
+                self.wakeRetryAttempt = 0
                 self.menuBarController.updateHandsFree(true)
                 self.startWakeDetection()
             case .denied(let message):
@@ -286,26 +391,52 @@ final class AppCoordinator {
 
     private func startWakeDetection() {
         guard handsFreeEnabled, stateMachine.state == .idle else { return }
+        publishState(detail: "Listening for “\(preferences.wakePhrase)”…")
         wakeDetector.start(
             onWake: { [weak self] match in
                 guard let self = self else { return }
+                self.wakeRetryAttempt = 0
+                self.wakeRetryWorkItem?.cancel()
                 _ = self.stateMachine.transition(to: .wakeDetected)
                 self.publishState()
-                if self.preferences.activationSoundsEnabled { self.speechSynthesis.playActivationSound() }
+                let cueDuration = self.preferences.activationSoundsEnabled
+                    ? self.speechSynthesis.playActivationSound()
+                    : 0
                 if let command = match.trailingCommand, !command.isEmpty {
                     self.lastRequest = command
                     _ = self.stateMachine.transition(to: .listening)
                     self.process(command)
                 } else {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) { self.beginCommandRecognition() }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + max(0.08, cueDuration + 0.12)) {
+                        self.beginCommandRecognition()
+                    }
                 }
             },
             onError: { [weak self] error in
-                self?.handsFreeEnabled = false
-                self?.menuBarController.updateHandsFree(false)
-                self?.handleError(error)
+                self?.handleWakeError(error)
             }
         )
+    }
+
+    private func handleWakeError(_ error: Error) {
+        if let wakeError = error as? WakeWordError,
+           case .onDeviceRecognitionUnavailable = wakeError {
+            handsFreeEnabled = false
+            menuBarController.updateHandsFree(false)
+            handleError(error)
+            return
+        }
+
+        guard handsFreeEnabled else { return }
+        wakeRetryAttempt += 1
+        let delay = min(30.0, pow(2.0, Double(min(5, wakeRetryAttempt - 1))))
+        _ = stateMachine.transition(to: .idle)
+        publishState(detail: "Wake listener retrying in \(Int(delay))s…")
+        JarvisLog.error("Wake listener stopped; a bounded retry was scheduled")
+        wakeRetryWorkItem?.cancel()
+        let retry = DispatchWorkItem { [weak self] in self?.startWakeDetection() }
+        wakeRetryWorkItem = retry
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: retry)
     }
 
     private func setLaunchAtLogin(_ enabled: Bool) {
@@ -327,6 +458,7 @@ final class AppCoordinator {
         } else {
             handsFreeEnabled = false
             wakeDetector.stop()
+            wakeRetryWorkItem?.cancel()
             menuBarController.updateHandsFree(false)
             if stateMachine.state == .listening { stopListening() }
         }
@@ -336,9 +468,13 @@ final class AppCoordinator {
         menuBarController.updateLaunchAtLogin(snapshot.launchAtLogin)
         if snapshot.startListeningAutomatically && !handsFreeEnabled {
             requestHandsFreeStart()
+        } else if snapshot.startListeningAutomatically && handsFreeEnabled {
+            wakeDetector.stop()
+            if stateMachine.state == .idle { startWakeDetection() }
         } else if !snapshot.startListeningAutomatically {
             handsFreeEnabled = false
             wakeDetector.stop()
+            wakeRetryWorkItem?.cancel()
             menuBarController.updateHandsFree(false)
         }
         publishState()
@@ -346,6 +482,7 @@ final class AppCoordinator {
 
     private func credentialsCleared() {
         gemini.clearConversation()
+        toolRouter.clearContext()
         deviceCount = nil
         publishState(detail: "Credentials cleared")
     }
@@ -353,6 +490,16 @@ final class AppCoordinator {
     private func devicesDiscovered(_ devices: [SmartDevice]) {
         deviceCount = devices.count
         publishState()
+    }
+
+    private func discoverDevicesAtStartup() {
+        let storedToken = try? keychain.string(for: .homeAssistantAccessToken)
+        guard !preferences.homeAssistantURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              let token = storedToken, !token.isEmpty else { return }
+        Task { [weak self] in
+            guard let self = self, let devices = try? await self.homeProvider.listDevices() else { return }
+            await MainActor.run { self.devicesDiscovered(devices) }
+        }
     }
 
     private func confirmationValue(from transcript: String) -> Bool? {

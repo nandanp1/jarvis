@@ -194,6 +194,11 @@ Enter credentials through Jarvis Settings. Gemini API keys and Home Assistant
 tokens belong in Keychain, never in source, schemes, environment files,
 `UserDefaults`, screenshots, logs, or test fixtures.
 
+The Home Assistant URL itself is non-secret, but Jarvis rejects embedded URL
+credentials, query strings, and fragments so tokens cannot accidentally escape
+Keychain. Plain HTTP is appropriate only on a trusted local network; use HTTPS
+when traffic crosses an untrusted boundary.
+
 For local Home Assistant setup and physical verification, see
 [SMART_HOME.md](SMART_HOME.md).
 

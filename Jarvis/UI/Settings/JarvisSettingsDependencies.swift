@@ -13,6 +13,7 @@ struct JarvisSettingsSnapshot {
     let speakingRate: Float
     let activationSoundsEnabled: Bool
     let geminiModel: String
+    let defaultLocation: String
     let homeAssistantURL: String
 }
 

@@ -169,6 +169,11 @@ bounded local policy instead of implicitly enabling server-side interaction
 storage. The API key is retrieved from Keychain at request time and is never
 placed in preferences, source files, URLs, or logs.
 
+Gemini 3 requests combine custom functions with Google Search using validated
+tool choice. For another compatible model, Jarvis keeps custom functions but
+omits the Gemini-3-only combined Search path. The optional home-location setting
+is appended to the system instruction for otherwise locationless weather asks.
+
 `GeminiService` owns the exact bounded API-step history required for stateless
 Interactions requests, including tool-call signatures and results.
 `ConversationManager` maintains the UI-friendly user/Jarvis transcript. Both
@@ -225,8 +230,9 @@ visible. Sensitive actions such as unlocking a lock, opening a garage door, or
 disabling security require an explicit confirmation turn before execution.
 
 `MacCommandService` exposes typed operations such as volume, mute, opening a
-known application, display sleep, and status queries. Model output never
-becomes an arbitrary shell command or AppleScript program.
+known application, and display sleep. `SystemStatusService` separately exposes
+read-only battery, power, volume, architecture, and OS status. Model output
+never becomes an arbitrary shell command or AppleScript program.
 
 ## Persistence and secrets
 

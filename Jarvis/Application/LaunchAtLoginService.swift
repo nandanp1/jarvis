@@ -26,7 +26,8 @@ enum LaunchAtLoginError: LocalizedError {
 
 /// Big Sur-compatible launch-at-login registration. The LaunchAgent executes the
 /// installed Jarvis binary directly and restarts it only after abnormal exits.
-/// A one-minute throttle prevents a rapid crash/relaunch loop.
+/// A one-minute throttle prevents a rapid crash/relaunch loop. Enabling writes
+/// the agent for the next login without starting a second copy of Jarvis now.
 final class LaunchAtLoginService {
     static let label = "com.nandan.jarvis.launch-agent"
     static let throttleInterval = 60
@@ -86,44 +87,22 @@ final class LaunchAtLoginService {
             attributes: [.posixPermissions: 0o755]
         )
 
-        // Unload a prior registration before atomically replacing its file.
-        if isJobLoaded {
-            try runLaunchctl(arguments: ["bootout", jobTarget])
-        }
-
         let data = try launchAgentData(executable: executable)
         try data.write(to: launchAgentURL, options: .atomic)
         try fileManager.setAttributes([.posixPermissions: 0o644], ofItemAtPath: launchAgentURL.path)
-
-        do {
-            try runLaunchctl(arguments: ["bootstrap", sessionTarget, launchAgentURL.path])
-        } catch {
-            // Do not leave a registration that the UI would report as enabled
-            // when launchd rejected it.
-            try? fileManager.removeItem(at: launchAgentURL)
-            throw error
-        }
     }
 
     func disable() throws {
-        var unloadError: Error?
-        if isJobLoaded {
-            do {
-                try runLaunchctl(arguments: ["bootout", jobTarget])
-            } catch {
-                unloadError = error
-            }
-        }
-
+        // Remove the durable registration before asking launchd to unload it.
+        // If Jarvis is the managed process, bootout may terminate this process;
+        // deleting first guarantees it will not return at the next login.
         if fileManager.fileExists(atPath: launchAgentURL.path) {
             try validateExistingFileOwnership()
             try fileManager.removeItem(at: launchAgentURL)
         }
 
-        // Removing the owned plist prevents the job from returning at the next
-        // login even if launchd could not unload the current process.
-        if let unloadError = unloadError {
-            throw unloadError
+        if isJobLoaded {
+            try runLaunchctl(arguments: ["bootout", jobTarget])
         }
     }
 
@@ -177,7 +156,14 @@ final class LaunchAtLoginService {
         guard let data = try? Data(contentsOf: launchAgentURL),
               let propertyList = try? PropertyListSerialization.propertyList(from: data, options: [], format: nil),
               let dictionary = propertyList as? [String: Any],
-              dictionary["Label"] as? String == Self.label else {
+              dictionary["Label"] as? String == Self.label,
+              let program = dictionary["Program"] as? String,
+              let arguments = dictionary["ProgramArguments"] as? [String],
+              arguments.first == program,
+              arguments.dropFirst().contains("--launch-at-login"),
+              dictionary["RunAtLoad"] as? Bool == true,
+              let keepAlive = dictionary["KeepAlive"] as? [String: Any],
+              keepAlive["SuccessfulExit"] as? Bool == false else {
             throw LaunchAtLoginError.conflictingLaunchAgent
         }
     }

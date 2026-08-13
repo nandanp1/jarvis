@@ -111,6 +111,18 @@ struct HomeAssistantEntity: Decodable, Equatable {
     }
 }
 
+struct HomeAssistantConfiguration: Decodable, Equatable {
+    struct UnitSystem: Decodable, Equatable {
+        let temperature: String?
+    }
+
+    let unitSystem: UnitSystem?
+
+    enum CodingKeys: String, CodingKey {
+        case unitSystem = "unit_system"
+    }
+}
+
 final class HomeAssistantService {
     typealias BaseURLProvider = () -> String?
     typealias AccessTokenProvider = () -> String?
@@ -159,6 +171,45 @@ final class HomeAssistantService {
         } catch {
             throw HomeControlError.invalidResponse
         }
+    }
+
+    func fetchConfiguration() async throws -> HomeAssistantConfiguration {
+        let data = try await request(method: "GET", path: ["config"])
+        do {
+            return try decoder.decode(HomeAssistantConfiguration.self, from: data)
+        } catch {
+            throw HomeControlError.invalidResponse
+        }
+    }
+
+    /// Resolves Home Assistant's real area assignments without relying on
+    /// friendly-name heuristics. The template is fixed by Jarvis and returns no
+    /// secrets; older installations that lack `area_name` can fall back to the
+    /// attributes already handled by HomeAssistantProvider.
+    func fetchEntityAreas() async throws -> [String: String] {
+        let template = """
+        {% set ns = namespace(items=[]) %}
+        {% for item in states %}
+          {% set area = area_name(item.entity_id) %}
+          {% if area %}
+            {% set ns.items = ns.items + [{"entity_id": item.entity_id, "area": area}] %}
+          {% endif %}
+        {% endfor %}
+        {{ ns.items | tojson }}
+        """
+        let body = try encoder.encode(["template": JSONValue.string(template)])
+        let data = try await request(method: "POST", path: ["template"], body: body)
+        guard let rendered = String(data: data, encoding: .utf8),
+              let renderedData = rendered.data(using: .utf8),
+              let objects = try? JSONSerialization.jsonObject(with: renderedData) as? [[String: Any]] else {
+            throw HomeControlError.invalidResponse
+        }
+        return Dictionary(uniqueKeysWithValues: objects.compactMap { object in
+            guard let entityID = object["entity_id"] as? String,
+                  let area = (object["area"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !entityID.isEmpty, !area.isEmpty else { return nil }
+            return (entityID, area)
+        })
     }
 
     func fetchState(entityID: String) async throws -> HomeAssistantEntity {
@@ -259,13 +310,14 @@ final class HomeAssistantService {
             var components = URLComponents(string: configured),
             let scheme = components.scheme?.lowercased(),
             scheme == "http" || scheme == "https",
-            components.host != nil
+            components.host?.isEmpty == false,
+            components.user == nil,
+            components.password == nil,
+            components.query == nil,
+            components.fragment == nil
         else {
             throw HomeControlError.invalidConfiguration("Enter a valid Home Assistant HTTP or HTTPS URL.")
         }
-
-        components.query = nil
-        components.fragment = nil
         guard var url = components.url else {
             throw HomeControlError.invalidConfiguration("Enter a valid Home Assistant URL.")
         }

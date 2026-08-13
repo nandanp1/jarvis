@@ -51,6 +51,7 @@ enum GeminiError: LocalizedError {
     case invalidRequest
     case invalidResponse
     case api(statusCode: Int, message: String)
+    case interaction(status: String, message: String)
     case toolLoopLimit
     case noResponse
 
@@ -72,6 +73,11 @@ enum GeminiError: LocalizedError {
                 return "Gemini is rate-limited right now. Try again shortly."
             }
             return "Gemini request failed (HTTP \(statusCode)): \(message)"
+        case .interaction(let status, let message):
+            let detail = message.trimmingCharacters(in: .whitespacesAndNewlines)
+            return detail.isEmpty
+                ? "Gemini ended the request with status \(status)."
+                : "Gemini ended the request with status \(status): \(detail)"
         case .toolLoopLimit:
             return "Jarvis stopped an unexpectedly long chain of actions."
         case .noResponse:

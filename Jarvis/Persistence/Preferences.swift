@@ -86,7 +86,7 @@ final class Preferences {
     }
 
     var maxConversationTurns: Int {
-        get { max(2, defaults.integer(forKey: Key.maxConversationTurns)) }
-        set { defaults.set(max(2, newValue), forKey: Key.maxConversationTurns) }
+        get { min(20, max(2, defaults.integer(forKey: Key.maxConversationTurns))) }
+        set { defaults.set(min(20, max(2, newValue)), forKey: Key.maxConversationTurns) }
     }
 }

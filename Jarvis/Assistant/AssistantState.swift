@@ -11,7 +11,7 @@ enum AssistantState: String, CaseIterable {
 
     var statusText: String {
         switch self {
-        case .idle: return "Listening"
+        case .idle: return "Ready"
         case .wakeDetected: return "Wake phrase detected"
         case .listening: return "Listening…"
         case .processing: return "Thinking…"
@@ -23,7 +23,7 @@ enum AssistantState: String, CaseIterable {
 
     var promptText: String {
         switch self {
-        case .idle: return "Say \"Hey Jarvis\""
+        case .idle: return "Press Talk or enable hands-free listening"
         case .wakeDetected: return "I’m listening"
         case .listening: return "What can I do for you?"
         case .processing: return "Thinking…"
@@ -33,4 +33,3 @@ enum AssistantState: String, CaseIterable {
         }
     }
 }
-

@@ -63,8 +63,13 @@ final class SpeechRecognitionService {
         }
     }
 
-    func stop(cancelled: Bool = true) {
-        queue.async { [weak self] in self?.stopLocked(cancelled: cancelled) }
+    func stop(cancelled: Bool = true, completion: (() -> Void)? = nil) {
+        queue.async { [weak self] in
+            self?.stopLocked(cancelled: cancelled)
+            if let completion = completion {
+                DispatchQueue.main.async(execute: completion)
+            }
+        }
     }
 
     private func startLocked(
