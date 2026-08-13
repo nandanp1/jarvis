@@ -6,6 +6,7 @@ final class MenuBarController: NSObject {
     var onOpenJarvis: (() -> Void)?
     var onOpenSettings: (() -> Void)?
     var onClearConversation: (() -> Void)?
+    var onToggleListening: ((Bool) -> Void)?
     var onToggleLaunchAtLogin: ((Bool) -> Void)?
     var onQuit: (() -> Void)?
 
@@ -16,6 +17,7 @@ final class MenuBarController: NSObject {
     private let launchItem = NSMenuItem(title: "Launch at Login", action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
     private let talkItem = NSMenuItem(title: "Talk to Jarvis", action: #selector(talk), keyEquivalent: "t")
     private let stopItem = NSMenuItem(title: "Stop Listening", action: #selector(stopListening), keyEquivalent: "")
+    private let handsFreeItem = NSMenuItem(title: "Hands-Free Listening", action: #selector(toggleHandsFree), keyEquivalent: "")
 
     override init() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -39,6 +41,10 @@ final class MenuBarController: NSObject {
         launchItem.state = enabled ? .on : .off
     }
 
+    func updateHandsFree(_ enabled: Bool) {
+        handsFreeItem.state = enabled ? .on : .off
+    }
+
     private func configureStatusItem() {
         if let button = statusItem.button {
             button.title = "◆ Jarvis"
@@ -46,7 +52,8 @@ final class MenuBarController: NSObject {
         }
 
         let menu = NSMenu(title: "Jarvis")
-        [stateItem, .separator(), talkItem, stopItem, lastRequestItem, .separator()].forEach(menu.addItem)
+        handsFreeItem.target = self
+        [stateItem, .separator(), talkItem, stopItem, handsFreeItem, lastRequestItem, .separator()].forEach(menu.addItem)
         menu.addItem(actionItem("Open Jarvis", action: #selector(openJarvis), key: "j"))
         menu.addItem(actionItem("Jarvis Settings…", action: #selector(openSettings), key: ","))
         menu.addItem(.separator())
@@ -70,9 +77,9 @@ final class MenuBarController: NSObject {
     @objc private func openJarvis() { onOpenJarvis?() }
     @objc private func openSettings() { onOpenSettings?() }
     @objc private func clearConversation() { onClearConversation?() }
+    @objc private func toggleHandsFree() { onToggleListening?(handsFreeItem.state != .on) }
     @objc private func quit() { onQuit?() }
     @objc private func toggleLaunchAtLogin() {
         onToggleLaunchAtLogin?(launchItem.state != .on)
     }
 }
-

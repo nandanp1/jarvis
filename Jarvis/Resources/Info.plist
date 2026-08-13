@@ -29,12 +29,15 @@
     </dict>
     <key>NSHighResolutionCapable</key>
     <true/>
+    <key>NSPrincipalClass</key>
+    <string>NSApplication</string>
     <key>NSMicrophoneUsageDescription</key>
     <string>Jarvis uses the microphone only to hear the wake phrase and commands you ask it to process.</string>
+    <key>NSAppleEventsUsageDescription</key>
+    <string>Jarvis uses approved macOS automation to adjust audio and control allowlisted applications when you ask.</string>
     <key>NSSpeechRecognitionUsageDescription</key>
     <string>Jarvis uses speech recognition to transcribe your spoken commands.</string>
     <key>NSHumanReadableCopyright</key>
     <string>Copyright © 2026 Nandan. All rights reserved.</string>
 </dict>
 </plist>
-

@@ -28,7 +28,7 @@ final class Preferences {
             Key.voiceEnabled: true,
             Key.activationSoundsEnabled: true,
             Key.speakingRate: 175.0,
-            Key.geminiModel: "gemini-2.5-flash",
+            Key.geminiModel: "gemini-3.6-flash",
             Key.homeAssistantURL: "http://homeassistant.local:8123",
             Key.defaultLocation: "",
             Key.maxConversationTurns: 12
@@ -71,7 +71,7 @@ final class Preferences {
     }
 
     var geminiModel: String {
-        get { defaults.string(forKey: Key.geminiModel) ?? "gemini-2.5-flash" }
+        get { defaults.string(forKey: Key.geminiModel) ?? "gemini-3.6-flash" }
         set { defaults.set(newValue.trimmingCharacters(in: .whitespacesAndNewlines), forKey: Key.geminiModel) }
     }
 
@@ -90,4 +90,3 @@ final class Preferences {
         set { defaults.set(max(2, newValue), forKey: Key.maxConversationTurns) }
     }
 }
-

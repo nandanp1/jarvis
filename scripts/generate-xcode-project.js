@@ -33,10 +33,14 @@ function listSwiftFiles(directory) {
 const appFiles = listSwiftFiles(path.join(root, 'Jarvis'));
 const testFiles = listSwiftFiles(path.join(root, 'JarvisTests'));
 const allFiles = [...appFiles, ...testFiles];
-const frameworks = ['AppKit.framework', 'AVFoundation.framework', 'Speech.framework', 'Security.framework', 'IOKit.framework', 'QuartzCore.framework'];
+const frameworks = ['AppKit.framework', 'AVFoundation.framework', 'Speech.framework', 'Security.framework', 'IOKit.framework', 'Network.framework', 'QuartzCore.framework'];
+const testFrameworkNames = ['XCTest.framework'];
 
 const ref = (file) => id(`fileref:${file}`);
 const build = (file) => id(`build:${file}`);
+const pathInGroup = (file) => file.startsWith('JarvisTests/')
+  ? file.slice('JarvisTests/'.length)
+  : file.slice('Jarvis/'.length);
 
 const appTarget = id('target:Jarvis');
 const testTarget = id('target:JarvisTests');
@@ -62,17 +66,21 @@ function settings(entries, indent = '\t\t\t\t') {
   return Object.entries(entries).map(([key, value]) => `${indent}${key} = ${value};`).join('\n');
 }
 
-const fileRefs = allFiles.map((file) => `\t\t${ref(file)} /* ${path.basename(file)} */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ${JSON.stringify(file.replace(/^Jarvis\/?|^JarvisTests\/?/, ''))}; sourceTree = "<group>"; };`).join('\n');
+const fileRefs = allFiles.map((file) => `\t\t${ref(file)} /* ${path.basename(file)} */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ${JSON.stringify(pathInGroup(file))}; sourceTree = "<group>"; };`).join('\n');
 const buildRefs = allFiles.map((file) => `\t\t${build(file)} /* ${path.basename(file)} in Sources */ = {isa = PBXBuildFile; fileRef = ${ref(file)} /* ${path.basename(file)} */; };`).join('\n');
 const frameworkFileRefs = frameworks.map((name) => `\t\t${ref(name)} /* ${name} */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ${name}; path = System/Library/Frameworks/${name}; sourceTree = SDKROOT; };`).join('\n');
 const frameworkBuildRefs = frameworks.map((name) => `\t\t${build(name)} /* ${name} in Frameworks */ = {isa = PBXBuildFile; fileRef = ${ref(name)} /* ${name} */; };`).join('\n');
+const testFrameworkFileRefs = testFrameworkNames.map((name) => `\t\t${ref(name)} /* ${name} */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ${name}; path = Platforms/MacOSX.platform/Developer/Library/Frameworks/${name}; sourceTree = DEVELOPER_DIR; };`).join('\n');
+const testFrameworkBuildRefs = testFrameworkNames.map((name) => `\t\t${build(`test:${name}`)} /* ${name} in Frameworks */ = {isa = PBXBuildFile; fileRef = ${ref(name)} /* ${name} */; };`).join('\n');
 
 const appChildren = appFiles.map((file) => `\t\t\t\t${ref(file)} /* ${path.basename(file)} */,`).join('\n');
 const testChildren = testFiles.map((file) => `\t\t\t\t${ref(file)} /* ${path.basename(file)} */,`).join('\n');
 const frameworkChildren = frameworks.map((name) => `\t\t\t\t${ref(name)} /* ${name} */,`).join('\n');
+const testFrameworkChildren = testFrameworkNames.map((name) => `\t\t\t\t${ref(name)} /* ${name} */,`).join('\n');
 const appSourceBuilds = appFiles.map((file) => `\t\t\t\t${build(file)} /* ${path.basename(file)} in Sources */,`).join('\n');
 const testSourceBuilds = testFiles.map((file) => `\t\t\t\t${build(file)} /* ${path.basename(file)} in Sources */,`).join('\n');
 const frameworkBuilds = frameworks.map((name) => `\t\t\t\t${build(name)} /* ${name} in Frameworks */,`).join('\n');
+const testFrameworkBuilds = testFrameworkNames.map((name) => `\t\t\t\t${build(`test:${name}`)} /* ${name} in Frameworks */,`).join('\n');
 
 const projectDebug = id('config:project:Debug');
 const projectRelease = id('config:project:Release');
@@ -88,12 +96,13 @@ const pbxproj = `// !$*UTF8*$!
 {
 \tarchiveVersion = 1;
 \tclasses = {};
-\tobjectVersion = 55;
+\tobjectVersion = 54;
 \tobjects = {
 
 /* Begin PBXBuildFile section */
 ${buildRefs}
 ${frameworkBuildRefs}
+${testFrameworkBuildRefs}
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -103,6 +112,7 @@ ${frameworkBuildRefs}
 /* Begin PBXFileReference section */
 ${fileRefs}
 ${frameworkFileRefs}
+${testFrameworkFileRefs}
 \t\t${ref('Info.plist')} /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; name = Info.plist; path = Jarvis/Resources/Info.plist; sourceTree = SOURCE_ROOT; };
 \t\t${ref('Jarvis.entitlements')} /* Jarvis.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; name = Jarvis.entitlements; path = Jarvis/Resources/Jarvis.entitlements; sourceTree = SOURCE_ROOT; };
 \t\t${ref('TestInfo.plist')} /* TestInfo.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; name = TestInfo.plist; path = JarvisTests/TestInfo.plist; sourceTree = SOURCE_ROOT; };
@@ -112,7 +122,7 @@ ${frameworkFileRefs}
 
 /* Begin PBXFrameworksBuildPhase section */
 \t\t${appFrameworks} /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (\n${frameworkBuilds}\n\t\t\t); runOnlyForDeploymentPostprocessing = 0; };
-\t\t${testFrameworks} /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+\t\t${testFrameworks} /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (\n${testFrameworkBuilds}\n\t\t\t); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -120,7 +130,7 @@ ${frameworkFileRefs}
 \t\t${sourceGroup} /* Jarvis */ = {isa = PBXGroup; children = (\n${appChildren}\n\t\t\t); name = Jarvis; path = Jarvis; sourceTree = "<group>"; };
 \t\t${testGroup} /* JarvisTests */ = {isa = PBXGroup; children = (\n${testChildren}\n\t\t\t); name = JarvisTests; path = JarvisTests; sourceTree = "<group>"; };
 \t\t${resourcesGroup} /* Configuration */ = {isa = PBXGroup; children = (${ref('Info.plist')} /* Info.plist */, ${ref('Jarvis.entitlements')} /* Jarvis.entitlements */, ${ref('TestInfo.plist')} /* TestInfo.plist */,); name = Configuration; sourceTree = "<group>"; };
-\t\t${frameworksGroup} /* Frameworks */ = {isa = PBXGroup; children = (\n${frameworkChildren}\n\t\t\t); name = Frameworks; sourceTree = "<group>"; };
+\t\t${frameworksGroup} /* Frameworks */ = {isa = PBXGroup; children = (\n${frameworkChildren}\n${testFrameworkChildren}\n\t\t\t); name = Frameworks; sourceTree = "<group>"; };
 \t\t${productsGroup} /* Products */ = {isa = PBXGroup; children = (${appProduct} /* Jarvis.app */, ${testProduct} /* JarvisTests.xctest */,); name = Products; sourceTree = "<group>"; };
 /* End PBXGroup section */
 
@@ -193,4 +203,3 @@ fs.mkdirSync(schemeDirectory, { recursive: true });
 fs.writeFileSync(projectFile, pbxproj);
 fs.writeFileSync(path.join(schemeDirectory, 'Jarvis.xcscheme'), scheme);
 console.log(`Generated ${path.relative(root, projectFile)} with ${appFiles.length} app and ${testFiles.length} test source files.`);
-

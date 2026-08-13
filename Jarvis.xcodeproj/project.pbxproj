@@ -2,26 +2,65 @@
 {
 	archiveVersion = 1;
 	classes = {};
-	objectVersion = 55;
+	objectVersion = 54;
 	objects = {
 
 /* Begin PBXBuildFile section */
+		D3D130EF14D65E48B4358EE5 /* GeminiModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA54143383E1EAF01F047C21 /* GeminiModels.swift */; };
+		2C0C4CBCB25CF59DB4B40E2C /* GeminiService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0D9612621B81E94B6CBC57D /* GeminiService.swift */; };
+		57AE50D87A77CF5DADCC778A /* ToolCallRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CBC05E8D52A8DC996B3B141 /* ToolCallRouter.swift */; };
 		536F35435200DFF94B65E168 /* AppCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = C047E990086D75D4B53CC669 /* AppCoordinator.swift */; };
 		24515D89E3338C6695FA3077 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D8632323A758AB84FC8B09B /* AppDelegate.swift */; };
 		5A813E4F54F121BBB14D91AB /* JarvisLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 469933AF3D3FBB2B7F232FBD /* JarvisLog.swift */; };
+		855E0D26B442EB36C8DB63E8 /* LaunchAtLoginService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57E6BAEFAFA1D19F8175787B /* LaunchAtLoginService.swift */; };
 		31FF99D186D7953F9522E671 /* MenuBarController.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC47B34EB9BB9CA2D2F26E7A /* MenuBarController.swift */; };
+		28883CEC32B417438B6E46DE /* NetworkMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ABF50BFBAB4695045526246 /* NetworkMonitor.swift */; };
 		8615342EB98C0C0F4EC6F542 /* AssistantState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65A5556F1409DF6188A0DB6F /* AssistantState.swift */; };
+		8B89C80B1B97461A5A2B0CC3 /* AssistantStateMachine.swift in Sources */ = {isa = PBXBuildFile; fileRef = B172A937EDA61F858034D460 /* AssistantStateMachine.swift */; };
+		50F540AEDF7139AA5E8E204C /* ConversationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE1DC78BA83ADC8CEB8AB85D /* ConversationManager.swift */; };
+		BF619462D4C06C8D3E07BA1A /* LocalIntentParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D6F453FDFB859C5DE13EEB6 /* LocalIntentParser.swift */; };
+		13CFFFEFD749204DAF701A0B /* AudioPermissions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CCA75A5C81A18FB9155A9C7 /* AudioPermissions.swift */; };
+		252983737DB3AADC78FD6E5A /* MicrophoneService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C6BDEE0C751B44A1D44D4BE /* MicrophoneService.swift */; };
+		3C660CF4A05FA994A3445DDF /* SpeechRecognitionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B210A74372640C3A86B03360 /* SpeechRecognitionService.swift */; };
+		6C99C3EB58B57105789A275E /* SpeechSynthesisService.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF50A2FEB1DD114958CFB6FD /* SpeechSynthesisService.swift */; };
+		3CADCAF34AE5A39DF76F9CDD /* VoiceActivityDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BA3094C9E963648D8B5FB52 /* VoiceActivityDetector.swift */; };
+		A1EAE7748FD96E3D2BE6F14B /* WakeWordDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = D503E34172E13C6A6C3AB6A1 /* WakeWordDetector.swift */; };
+		64930E2793171747DD3ACEA0 /* MacCommandService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0AEFE83ACAF7A2684E231F29 /* MacCommandService.swift */; };
+		0F0C46A0C76B001C1E4F0F58 /* SystemStatusService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1933270879C6F3108378943B /* SystemStatusService.swift */; };
 		D1362F7079AC130F6E8145FC /* Preferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73BBF188E6418D525DC3B1D7 /* Preferences.swift */; };
+		A71550F404ACAF14D42D629B /* Routine.swift in Sources */ = {isa = PBXBuildFile; fileRef = C317A9F22C5A73979920DED1 /* Routine.swift */; };
+		C4215F5778B47FE284DC2740 /* RoutineExecutor.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE3BE57D76E6AC4729BD28D5 /* RoutineExecutor.swift */; };
+		62B105060156D4D101627E43 /* KeychainService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75F374A8BAB27FE159BE8BFC /* KeychainService.swift */; };
+		2340887EA395B91E05022027 /* DeviceResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC903F98503E8E09FAC50E44 /* DeviceResolver.swift */; };
+		2B9DEFD952034452C92F21B3 /* GoogleAssistantProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90F277288A20805607F07CA7 /* GoogleAssistantProvider.swift */; };
+		A8FFE2C3F42B6273FDE31EC7 /* HomeAssistantProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E12BA71CC9380294C7C98D0 /* HomeAssistantProvider.swift */; };
+		8B4C224B6064066D5A37EF68 /* HomeAssistantService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2FF8295A9C56EF4D49301FF3 /* HomeAssistantService.swift */; };
+		61AA3C74769E1BFE859FF44B /* HomeCommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0287F04962184889F075579E /* HomeCommand.swift */; };
+		3670424234A96A2BEC3B1530 /* HomeControlProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7B2B87019B84BC5343BF9C9 /* HomeControlProvider.swift */; };
+		CACF8C42AC457AEBA43EEB4E /* MockHomeProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7936B5F2DE72427D68193932 /* MockHomeProvider.swift */; };
+		58C5A3D69D455A6BD6FA0972 /* SmartDevice.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48733782A9B4A58075A1DA9A /* SmartDevice.swift */; };
 		4516EF4306D02101198143E7 /* AmbientOrbView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE665D25D398B7838396D924 /* AmbientOrbView.swift */; };
 		BE9C80D8DAF80549C2F58BE9 /* JarvisTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76F14D15B86D619BE6332A88 /* JarvisTheme.swift */; };
 		4F847D21C60B83C600870E5C /* JarvisMainViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2DAA4158B88844BFA2ED2E01 /* JarvisMainViewController.swift */; };
 		85DE8380805FAD27EEFED807 /* JarvisWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61EBC2DF57134AE0985B80CD /* JarvisWindowController.swift */; };
+		4F8EE57911D45846E54D7DFC /* JarvisSettingsComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2FD5F80AE9C39D1D53CDA3A2 /* JarvisSettingsComponents.swift */; };
+		B3FC335DFF37E84AA91D1101 /* JarvisSettingsDependencies.swift in Sources */ = {isa = PBXBuildFile; fileRef = A246357DCF59873E3CC9EF45 /* JarvisSettingsDependencies.swift */; };
+		8DE2370F47FC0F17989FAC3E /* JarvisSettingsViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8CF0FD0E9A5917B739F521F2 /* JarvisSettingsViewController.swift */; };
+		39E3077BC6E81CA7BD7252C2 /* JarvisSettingsWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5993D4838B1D6C8BA7890735 /* JarvisSettingsWindowController.swift */; };
+		E6CA5DE0FBB3E90154693DFE /* AssistantStateMachineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FB510355518396AEED44CEC /* AssistantStateMachineTests.swift */; };
+		A2DFE066BCB0CF91251FEA66 /* ConversationManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E231D6FE29AB64D8FE31A1D4 /* ConversationManagerTests.swift */; };
+		2CFF1214259BF2E0C0C51122 /* LocalIntentParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3C83C26DE70AF62F4E93FCF /* LocalIntentParserTests.swift */; };
+		CD9F94BDD8CF31B40F11CF77 /* SmartHomeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2DEDAC5BD478D3147EB0C71A /* SmartHomeTests.swift */; };
+		EEC1F1842E1241FF70E31D18 /* VoiceActivityDetectorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5AD3B4870C73B817E55593A /* VoiceActivityDetectorTests.swift */; };
+		06EBC18B60A59F8531F5EA78 /* WakeWordDetectorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E65027328AF3D6697697F9E9 /* WakeWordDetectorTests.swift */; };
 		223F9C2DFED28F149CA198CC /* AppKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7A42D18C390BA06DEA42D70A /* AppKit.framework */; };
 		8A712A129E60939A171F46A0 /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = BEFAD67BC0F02C604AD43131 /* AVFoundation.framework */; };
 		0B4B1D117175567E2232D00D /* Speech.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = BC1C7B94CFFE327EEF0DA756 /* Speech.framework */; };
 		24B92EB4824DF951C39EC227 /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E1BE50B9E5E43E1D3777708C /* Security.framework */; };
 		18552935F57F8C8EA54122D3 /* IOKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 06B7BDCA550E9BC83FACCC7F /* IOKit.framework */; };
+		E96A118980E2A576AA10B676 /* Network.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 58BE46A76CDB183B8052276A /* Network.framework */; };
 		172A1CD16EAC5E2BAF72CEBE /* QuartzCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E8F04891F4830DC31323C374 /* QuartzCore.framework */; };
+		816F41B07372319D8460DED3 /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D338DEA6A34C9CF990BEC4A9 /* XCTest.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -29,22 +68,61 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		DA54143383E1EAF01F047C21 /* GeminiModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AI/GeminiModels.swift"; sourceTree = "<group>"; };
+		F0D9612621B81E94B6CBC57D /* GeminiService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AI/GeminiService.swift"; sourceTree = "<group>"; };
+		1CBC05E8D52A8DC996B3B141 /* ToolCallRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AI/ToolCallRouter.swift"; sourceTree = "<group>"; };
 		C047E990086D75D4B53CC669 /* AppCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Application/AppCoordinator.swift"; sourceTree = "<group>"; };
 		4D8632323A758AB84FC8B09B /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Application/AppDelegate.swift"; sourceTree = "<group>"; };
 		469933AF3D3FBB2B7F232FBD /* JarvisLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Application/JarvisLog.swift"; sourceTree = "<group>"; };
+		57E6BAEFAFA1D19F8175787B /* LaunchAtLoginService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Application/LaunchAtLoginService.swift"; sourceTree = "<group>"; };
 		BC47B34EB9BB9CA2D2F26E7A /* MenuBarController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Application/MenuBarController.swift"; sourceTree = "<group>"; };
+		2ABF50BFBAB4695045526246 /* NetworkMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Application/NetworkMonitor.swift"; sourceTree = "<group>"; };
 		65A5556F1409DF6188A0DB6F /* AssistantState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Assistant/AssistantState.swift"; sourceTree = "<group>"; };
+		B172A937EDA61F858034D460 /* AssistantStateMachine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Assistant/AssistantStateMachine.swift"; sourceTree = "<group>"; };
+		DE1DC78BA83ADC8CEB8AB85D /* ConversationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Assistant/ConversationManager.swift"; sourceTree = "<group>"; };
+		0D6F453FDFB859C5DE13EEB6 /* LocalIntentParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Assistant/LocalIntentParser.swift"; sourceTree = "<group>"; };
+		7CCA75A5C81A18FB9155A9C7 /* AudioPermissions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Audio/AudioPermissions.swift"; sourceTree = "<group>"; };
+		3C6BDEE0C751B44A1D44D4BE /* MicrophoneService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Audio/MicrophoneService.swift"; sourceTree = "<group>"; };
+		B210A74372640C3A86B03360 /* SpeechRecognitionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Audio/SpeechRecognitionService.swift"; sourceTree = "<group>"; };
+		DF50A2FEB1DD114958CFB6FD /* SpeechSynthesisService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Audio/SpeechSynthesisService.swift"; sourceTree = "<group>"; };
+		4BA3094C9E963648D8B5FB52 /* VoiceActivityDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Audio/VoiceActivityDetector.swift"; sourceTree = "<group>"; };
+		D503E34172E13C6A6C3AB6A1 /* WakeWordDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Audio/WakeWordDetector.swift"; sourceTree = "<group>"; };
+		0AEFE83ACAF7A2684E231F29 /* MacCommandService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Mac/MacCommandService.swift"; sourceTree = "<group>"; };
+		1933270879C6F3108378943B /* SystemStatusService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Mac/SystemStatusService.swift"; sourceTree = "<group>"; };
 		73BBF188E6418D525DC3B1D7 /* Preferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Persistence/Preferences.swift"; sourceTree = "<group>"; };
+		C317A9F22C5A73979920DED1 /* Routine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Routines/Routine.swift"; sourceTree = "<group>"; };
+		CE3BE57D76E6AC4729BD28D5 /* RoutineExecutor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Routines/RoutineExecutor.swift"; sourceTree = "<group>"; };
+		75F374A8BAB27FE159BE8BFC /* KeychainService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Security/KeychainService.swift"; sourceTree = "<group>"; };
+		AC903F98503E8E09FAC50E44 /* DeviceResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SmartHome/DeviceResolver.swift"; sourceTree = "<group>"; };
+		90F277288A20805607F07CA7 /* GoogleAssistantProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SmartHome/GoogleAssistantProvider.swift"; sourceTree = "<group>"; };
+		9E12BA71CC9380294C7C98D0 /* HomeAssistantProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SmartHome/HomeAssistantProvider.swift"; sourceTree = "<group>"; };
+		2FF8295A9C56EF4D49301FF3 /* HomeAssistantService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SmartHome/HomeAssistantService.swift"; sourceTree = "<group>"; };
+		0287F04962184889F075579E /* HomeCommand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SmartHome/HomeCommand.swift"; sourceTree = "<group>"; };
+		A7B2B87019B84BC5343BF9C9 /* HomeControlProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SmartHome/HomeControlProvider.swift"; sourceTree = "<group>"; };
+		7936B5F2DE72427D68193932 /* MockHomeProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SmartHome/MockHomeProvider.swift"; sourceTree = "<group>"; };
+		48733782A9B4A58075A1DA9A /* SmartDevice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SmartHome/SmartDevice.swift"; sourceTree = "<group>"; };
 		EE665D25D398B7838396D924 /* AmbientOrbView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "UI/Components/AmbientOrbView.swift"; sourceTree = "<group>"; };
 		76F14D15B86D619BE6332A88 /* JarvisTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "UI/Components/JarvisTheme.swift"; sourceTree = "<group>"; };
 		2DAA4158B88844BFA2ED2E01 /* JarvisMainViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "UI/JarvisMainViewController.swift"; sourceTree = "<group>"; };
 		61EBC2DF57134AE0985B80CD /* JarvisWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "UI/JarvisWindowController.swift"; sourceTree = "<group>"; };
+		2FD5F80AE9C39D1D53CDA3A2 /* JarvisSettingsComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "UI/Settings/JarvisSettingsComponents.swift"; sourceTree = "<group>"; };
+		A246357DCF59873E3CC9EF45 /* JarvisSettingsDependencies.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "UI/Settings/JarvisSettingsDependencies.swift"; sourceTree = "<group>"; };
+		8CF0FD0E9A5917B739F521F2 /* JarvisSettingsViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "UI/Settings/JarvisSettingsViewController.swift"; sourceTree = "<group>"; };
+		5993D4838B1D6C8BA7890735 /* JarvisSettingsWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "UI/Settings/JarvisSettingsWindowController.swift"; sourceTree = "<group>"; };
+		4FB510355518396AEED44CEC /* AssistantStateMachineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AssistantStateMachineTests.swift"; sourceTree = "<group>"; };
+		E231D6FE29AB64D8FE31A1D4 /* ConversationManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ConversationManagerTests.swift"; sourceTree = "<group>"; };
+		C3C83C26DE70AF62F4E93FCF /* LocalIntentParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LocalIntentParserTests.swift"; sourceTree = "<group>"; };
+		2DEDAC5BD478D3147EB0C71A /* SmartHomeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SmartHomeTests.swift"; sourceTree = "<group>"; };
+		E5AD3B4870C73B817E55593A /* VoiceActivityDetectorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VoiceActivityDetectorTests.swift"; sourceTree = "<group>"; };
+		E65027328AF3D6697697F9E9 /* WakeWordDetectorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WakeWordDetectorTests.swift"; sourceTree = "<group>"; };
 		7A42D18C390BA06DEA42D70A /* AppKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppKit.framework; path = System/Library/Frameworks/AppKit.framework; sourceTree = SDKROOT; };
 		BEFAD67BC0F02C604AD43131 /* AVFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVFoundation.framework; path = System/Library/Frameworks/AVFoundation.framework; sourceTree = SDKROOT; };
 		BC1C7B94CFFE327EEF0DA756 /* Speech.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Speech.framework; path = System/Library/Frameworks/Speech.framework; sourceTree = SDKROOT; };
 		E1BE50B9E5E43E1D3777708C /* Security.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Security.framework; path = System/Library/Frameworks/Security.framework; sourceTree = SDKROOT; };
 		06B7BDCA550E9BC83FACCC7F /* IOKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = IOKit.framework; path = System/Library/Frameworks/IOKit.framework; sourceTree = SDKROOT; };
+		58BE46A76CDB183B8052276A /* Network.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Network.framework; path = System/Library/Frameworks/Network.framework; sourceTree = SDKROOT; };
 		E8F04891F4830DC31323C374 /* QuartzCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = QuartzCore.framework; path = System/Library/Frameworks/QuartzCore.framework; sourceTree = SDKROOT; };
+		D338DEA6A34C9CF990BEC4A9 /* XCTest.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = XCTest.framework; path = Platforms/MacOSX.platform/Developer/Library/Frameworks/XCTest.framework; sourceTree = DEVELOPER_DIR; };
 		F435B14B4284D872DEABF62D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; name = Info.plist; path = Jarvis/Resources/Info.plist; sourceTree = SOURCE_ROOT; };
 		8CCDF1C3EB8D821116378476 /* Jarvis.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; name = Jarvis.entitlements; path = Jarvis/Resources/Jarvis.entitlements; sourceTree = SOURCE_ROOT; };
 		E94F1AAFA4E2632C8F37AF0D /* TestInfo.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; name = TestInfo.plist; path = JarvisTests/TestInfo.plist; sourceTree = SOURCE_ROOT; };
@@ -59,27 +137,66 @@
 				0B4B1D117175567E2232D00D /* Speech.framework in Frameworks */,
 				24B92EB4824DF951C39EC227 /* Security.framework in Frameworks */,
 				18552935F57F8C8EA54122D3 /* IOKit.framework in Frameworks */,
+				E96A118980E2A576AA10B676 /* Network.framework in Frameworks */,
 				172A1CD16EAC5E2BAF72CEBE /* QuartzCore.framework in Frameworks */,
 			); runOnlyForDeploymentPostprocessing = 0; };
-		62162168E016E02216B313B2 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		62162168E016E02216B313B2 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (
+				816F41B07372319D8460DED3 /* XCTest.framework in Frameworks */,
+			); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
 		BB9AE336151A4F9E714244B8 = {isa = PBXGroup; children = (7747C4B88602574CD2C34540 /* Jarvis */, BF1EE0AF9D023B27EBF9E2BC /* JarvisTests */, F0B3A7CFF7749A47F8A0C09F /* Configuration */, 290C7EA8B707BD2A26276A32 /* Frameworks */, 93CD171E696C5937EEC2F0C0 /* Products */,); sourceTree = "<group>"; };
 		7747C4B88602574CD2C34540 /* Jarvis */ = {isa = PBXGroup; children = (
+				DA54143383E1EAF01F047C21 /* GeminiModels.swift */,
+				F0D9612621B81E94B6CBC57D /* GeminiService.swift */,
+				1CBC05E8D52A8DC996B3B141 /* ToolCallRouter.swift */,
 				C047E990086D75D4B53CC669 /* AppCoordinator.swift */,
 				4D8632323A758AB84FC8B09B /* AppDelegate.swift */,
 				469933AF3D3FBB2B7F232FBD /* JarvisLog.swift */,
+				57E6BAEFAFA1D19F8175787B /* LaunchAtLoginService.swift */,
 				BC47B34EB9BB9CA2D2F26E7A /* MenuBarController.swift */,
+				2ABF50BFBAB4695045526246 /* NetworkMonitor.swift */,
 				65A5556F1409DF6188A0DB6F /* AssistantState.swift */,
+				B172A937EDA61F858034D460 /* AssistantStateMachine.swift */,
+				DE1DC78BA83ADC8CEB8AB85D /* ConversationManager.swift */,
+				0D6F453FDFB859C5DE13EEB6 /* LocalIntentParser.swift */,
+				7CCA75A5C81A18FB9155A9C7 /* AudioPermissions.swift */,
+				3C6BDEE0C751B44A1D44D4BE /* MicrophoneService.swift */,
+				B210A74372640C3A86B03360 /* SpeechRecognitionService.swift */,
+				DF50A2FEB1DD114958CFB6FD /* SpeechSynthesisService.swift */,
+				4BA3094C9E963648D8B5FB52 /* VoiceActivityDetector.swift */,
+				D503E34172E13C6A6C3AB6A1 /* WakeWordDetector.swift */,
+				0AEFE83ACAF7A2684E231F29 /* MacCommandService.swift */,
+				1933270879C6F3108378943B /* SystemStatusService.swift */,
 				73BBF188E6418D525DC3B1D7 /* Preferences.swift */,
+				C317A9F22C5A73979920DED1 /* Routine.swift */,
+				CE3BE57D76E6AC4729BD28D5 /* RoutineExecutor.swift */,
+				75F374A8BAB27FE159BE8BFC /* KeychainService.swift */,
+				AC903F98503E8E09FAC50E44 /* DeviceResolver.swift */,
+				90F277288A20805607F07CA7 /* GoogleAssistantProvider.swift */,
+				9E12BA71CC9380294C7C98D0 /* HomeAssistantProvider.swift */,
+				2FF8295A9C56EF4D49301FF3 /* HomeAssistantService.swift */,
+				0287F04962184889F075579E /* HomeCommand.swift */,
+				A7B2B87019B84BC5343BF9C9 /* HomeControlProvider.swift */,
+				7936B5F2DE72427D68193932 /* MockHomeProvider.swift */,
+				48733782A9B4A58075A1DA9A /* SmartDevice.swift */,
 				EE665D25D398B7838396D924 /* AmbientOrbView.swift */,
 				76F14D15B86D619BE6332A88 /* JarvisTheme.swift */,
 				2DAA4158B88844BFA2ED2E01 /* JarvisMainViewController.swift */,
 				61EBC2DF57134AE0985B80CD /* JarvisWindowController.swift */,
+				2FD5F80AE9C39D1D53CDA3A2 /* JarvisSettingsComponents.swift */,
+				A246357DCF59873E3CC9EF45 /* JarvisSettingsDependencies.swift */,
+				8CF0FD0E9A5917B739F521F2 /* JarvisSettingsViewController.swift */,
+				5993D4838B1D6C8BA7890735 /* JarvisSettingsWindowController.swift */,
 			); name = Jarvis; path = Jarvis; sourceTree = "<group>"; };
 		BF1EE0AF9D023B27EBF9E2BC /* JarvisTests */ = {isa = PBXGroup; children = (
-
+				4FB510355518396AEED44CEC /* AssistantStateMachineTests.swift */,
+				E231D6FE29AB64D8FE31A1D4 /* ConversationManagerTests.swift */,
+				C3C83C26DE70AF62F4E93FCF /* LocalIntentParserTests.swift */,
+				2DEDAC5BD478D3147EB0C71A /* SmartHomeTests.swift */,
+				E5AD3B4870C73B817E55593A /* VoiceActivityDetectorTests.swift */,
+				E65027328AF3D6697697F9E9 /* WakeWordDetectorTests.swift */,
 			); name = JarvisTests; path = JarvisTests; sourceTree = "<group>"; };
 		F0B3A7CFF7749A47F8A0C09F /* Configuration */ = {isa = PBXGroup; children = (F435B14B4284D872DEABF62D /* Info.plist */, 8CCDF1C3EB8D821116378476 /* Jarvis.entitlements */, E94F1AAFA4E2632C8F37AF0D /* TestInfo.plist */,); name = Configuration; sourceTree = "<group>"; };
 		290C7EA8B707BD2A26276A32 /* Frameworks */ = {isa = PBXGroup; children = (
@@ -88,7 +205,9 @@
 				BC1C7B94CFFE327EEF0DA756 /* Speech.framework */,
 				E1BE50B9E5E43E1D3777708C /* Security.framework */,
 				06B7BDCA550E9BC83FACCC7F /* IOKit.framework */,
+				58BE46A76CDB183B8052276A /* Network.framework */,
 				E8F04891F4830DC31323C374 /* QuartzCore.framework */,
+				D338DEA6A34C9CF990BEC4A9 /* XCTest.framework */,
 			); name = Frameworks; sourceTree = "<group>"; };
 		93CD171E696C5937EEC2F0C0 /* Products */ = {isa = PBXGroup; children = (B73CDB207CED7C575F2F57F2 /* Jarvis.app */, D33E54C20829329441C63F52 /* JarvisTests.xctest */,); name = Products; sourceTree = "<group>"; };
 /* End PBXGroup section */
@@ -109,19 +228,55 @@
 
 /* Begin PBXSourcesBuildPhase section */
 		9FEABBAFAF00A09BDFE49A8B /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (
+				D3D130EF14D65E48B4358EE5 /* GeminiModels.swift in Sources */,
+				2C0C4CBCB25CF59DB4B40E2C /* GeminiService.swift in Sources */,
+				57AE50D87A77CF5DADCC778A /* ToolCallRouter.swift in Sources */,
 				536F35435200DFF94B65E168 /* AppCoordinator.swift in Sources */,
 				24515D89E3338C6695FA3077 /* AppDelegate.swift in Sources */,
 				5A813E4F54F121BBB14D91AB /* JarvisLog.swift in Sources */,
+				855E0D26B442EB36C8DB63E8 /* LaunchAtLoginService.swift in Sources */,
 				31FF99D186D7953F9522E671 /* MenuBarController.swift in Sources */,
+				28883CEC32B417438B6E46DE /* NetworkMonitor.swift in Sources */,
 				8615342EB98C0C0F4EC6F542 /* AssistantState.swift in Sources */,
+				8B89C80B1B97461A5A2B0CC3 /* AssistantStateMachine.swift in Sources */,
+				50F540AEDF7139AA5E8E204C /* ConversationManager.swift in Sources */,
+				BF619462D4C06C8D3E07BA1A /* LocalIntentParser.swift in Sources */,
+				13CFFFEFD749204DAF701A0B /* AudioPermissions.swift in Sources */,
+				252983737DB3AADC78FD6E5A /* MicrophoneService.swift in Sources */,
+				3C660CF4A05FA994A3445DDF /* SpeechRecognitionService.swift in Sources */,
+				6C99C3EB58B57105789A275E /* SpeechSynthesisService.swift in Sources */,
+				3CADCAF34AE5A39DF76F9CDD /* VoiceActivityDetector.swift in Sources */,
+				A1EAE7748FD96E3D2BE6F14B /* WakeWordDetector.swift in Sources */,
+				64930E2793171747DD3ACEA0 /* MacCommandService.swift in Sources */,
+				0F0C46A0C76B001C1E4F0F58 /* SystemStatusService.swift in Sources */,
 				D1362F7079AC130F6E8145FC /* Preferences.swift in Sources */,
+				A71550F404ACAF14D42D629B /* Routine.swift in Sources */,
+				C4215F5778B47FE284DC2740 /* RoutineExecutor.swift in Sources */,
+				62B105060156D4D101627E43 /* KeychainService.swift in Sources */,
+				2340887EA395B91E05022027 /* DeviceResolver.swift in Sources */,
+				2B9DEFD952034452C92F21B3 /* GoogleAssistantProvider.swift in Sources */,
+				A8FFE2C3F42B6273FDE31EC7 /* HomeAssistantProvider.swift in Sources */,
+				8B4C224B6064066D5A37EF68 /* HomeAssistantService.swift in Sources */,
+				61AA3C74769E1BFE859FF44B /* HomeCommand.swift in Sources */,
+				3670424234A96A2BEC3B1530 /* HomeControlProvider.swift in Sources */,
+				CACF8C42AC457AEBA43EEB4E /* MockHomeProvider.swift in Sources */,
+				58C5A3D69D455A6BD6FA0972 /* SmartDevice.swift in Sources */,
 				4516EF4306D02101198143E7 /* AmbientOrbView.swift in Sources */,
 				BE9C80D8DAF80549C2F58BE9 /* JarvisTheme.swift in Sources */,
 				4F847D21C60B83C600870E5C /* JarvisMainViewController.swift in Sources */,
 				85DE8380805FAD27EEFED807 /* JarvisWindowController.swift in Sources */,
+				4F8EE57911D45846E54D7DFC /* JarvisSettingsComponents.swift in Sources */,
+				B3FC335DFF37E84AA91D1101 /* JarvisSettingsDependencies.swift in Sources */,
+				8DE2370F47FC0F17989FAC3E /* JarvisSettingsViewController.swift in Sources */,
+				39E3077BC6E81CA7BD7252C2 /* JarvisSettingsWindowController.swift in Sources */,
 			); runOnlyForDeploymentPostprocessing = 0; };
 		EF80E12604E81EF5E7AFF2F1 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (
-
+				E6CA5DE0FBB3E90154693DFE /* AssistantStateMachineTests.swift in Sources */,
+				A2DFE066BCB0CF91251FEA66 /* ConversationManagerTests.swift in Sources */,
+				2CFF1214259BF2E0C0C51122 /* LocalIntentParserTests.swift in Sources */,
+				CD9F94BDD8CF31B40F11CF77 /* SmartHomeTests.swift in Sources */,
+				EEC1F1842E1241FF70E31D18 /* VoiceActivityDetectorTests.swift in Sources */,
+				06EBC18B60A59F8531F5EA78 /* WakeWordDetectorTests.swift in Sources */,
 			); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXSourcesBuildPhase section */
 

@@ -50,6 +50,11 @@ final class JarvisMainViewController: NSViewController {
         }
     }
 
+    func clearConversation() {
+        transcriptLabel.stringValue = ""
+        responseLabel.stringValue = ""
+    }
+
     private func buildInterface() {
         let visualEffect = NSVisualEffectView()
         visualEffect.material = .hudWindow
@@ -134,11 +139,11 @@ final class JarvisMainViewController: NSViewController {
 
     private func startClock() {
         clockTimer?.invalidate()
-        updateClock()
-        clockTimer = Timer.scheduledTimer(timeInterval: 30, target: self, selector: #selector(updateClock), userInfo: nil, repeats: true)
+        updateClock(nil)
+        clockTimer = Timer.scheduledTimer(timeInterval: 30, target: self, selector: #selector(updateClock(_:)), userInfo: nil, repeats: true)
     }
 
-    @objc private func updateClock() {
+    @objc private func updateClock(_ timer: Timer?) {
         let formatter = DateFormatter()
         formatter.dateFormat = "h:mm a"
         timeLabel.stringValue = formatter.string(from: Date())
@@ -152,4 +157,3 @@ final class JarvisMainViewController: NSViewController {
         onOpenSettings?()
     }
 }
-
