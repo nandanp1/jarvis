@@ -1,0 +1,72 @@
+name: Build and Test
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: jarvis-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: macOS 11 compatibility build
+    runs-on: macos-15
+    timeout-minutes: 25
+
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_16.4.app/Contents/Developer
+      DERIVED_DATA_PATH: ${{ runner.temp }}/JarvisDerivedData
+      TEST_DERIVED_DATA_PATH: ${{ runner.temp }}/JarvisTestDerivedData
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Report toolchain
+        run: |
+          sw_vers
+          uname -m
+          xcodebuild -version
+          swift --version
+
+      - name: Validate repository invariants
+        run: ./scripts/validate-project.sh
+
+      - name: Build universal Debug app for macOS 11
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project Jarvis.xcodeproj \
+            -scheme Jarvis \
+            -configuration Debug \
+            -destination 'generic/platform=macOS' \
+            -derivedDataPath "$DERIVED_DATA_PATH" \
+            CODE_SIGNING_ALLOWED=NO \
+            MACOSX_DEPLOYMENT_TARGET=11.0 \
+            ONLY_ACTIVE_ARCH=NO \
+            ARCHS='x86_64 arm64' \
+            build
+
+      - name: Run unit tests
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project Jarvis.xcodeproj \
+            -scheme Jarvis \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            -derivedDataPath "$TEST_DERIVED_DATA_PATH" \
+            CODE_SIGNING_ALLOWED=NO \
+            MACOSX_DEPLOYMENT_TARGET=11.0 \
+            test
